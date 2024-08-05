@@ -1,0 +1,5 @@
+çerçeve için raised yerine sunken kullanılabilir
+info box ve kamera çerçevesi eşitlenicek 
+joystick eklenecek
+info box a çıktı yazdır
+
