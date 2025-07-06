@@ -3,6 +3,7 @@ import tkinter as Tk
 from tkinter.ttk import Combobox
 from PIL import ImageTk, Image
 #Kamera seçimi yapılıyor
+#yorum eklendi
 cap = cv.VideoCapture(0)
 
 class LIHAIHAYerIstasyonu:
