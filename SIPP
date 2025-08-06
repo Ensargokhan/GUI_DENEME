@@ -1,0 +1,311 @@
+#include <SFML/Graphics.hpp>
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <queue>
+#include <cmath>
+#include <string>
+#include <algorithm>
+
+enum CellType { EMPTY, WALL, START, GOAL };
+// === CELL ===
+struct Cell {
+    sf::RectangleShape shape;
+    CellType type;
+    int row, col;
+    Cell(float x = 0, float y = 0, float s = 0, int r = 0, int c = 0) {
+        shape.setPosition(x, y);
+        shape.setSize({ s - 1,s - 1 });
+        shape.setFillColor(sf::Color(220, 220, 220));
+        shape.setOutlineThickness(1);
+        shape.setOutlineColor(sf::Color(200, 200, 200));
+        type = EMPTY; row = r; col = c;
+    }
+    void setType(CellType t) {
+        type = t;
+        switch (t) {
+        case EMPTY: shape.setFillColor(sf::Color(220, 220, 220)); break;
+        case WALL: shape.setFillColor(sf::Color::Black); break;
+        case START: shape.setFillColor(sf::Color::Red); break;
+        case GOAL: shape.setFillColor(sf::Color::Green); break;
+        }
+    }
+    void draw(sf::RenderWindow& w) { w.draw(shape); }
+};
+
+// === GRID ===
+struct Grid {
+    int rows, cols; float s;
+    std::vector<std::vector<Cell>> cells;
+    Grid(int r, int c, float size) :rows(r), cols(c), s(size) {
+        cells.resize(r, std::vector<Cell>(c));
+        for (int i = 0; i < r; i++)
+            for (int j = 0; j < c; j++)
+                cells[i][j] = Cell(j * s, i * s, s, i, j);
+    }
+    void draw(sf::RenderWindow& w) {
+        for (auto& row : cells)for (auto& cell : row)cell.draw(w);
+    }
+    bool isWall(int r, int c) {
+        return(r < 0 || r >= rows || c < 0 || c >= cols || cells[r][c].type == WALL);
+    }
+    void toggleWall(int r, int c) {
+        if (r >= 0 && r < rows && c >= 0 && c < cols)cells[r][c].setType(cells[r][c].type == WALL ? EMPTY : WALL);
+    }
+    void saveToFile(const std::string& f) {
+        std::ofstream out(f);
+        for (int i = 0; i < rows; i++) { for (int j = 0; j < cols; j++)out << cells[i][j].type << " "; out << "\n"; }
+        std::cout << "Grid saved\n";
+    }
+    void loadFromFile(const std::string& f) {
+        std::ifstream in(f);
+        if (!in) { std::cout << "Dosya yok\n"; return; }
+        for (int i = 0; i < rows; i++)for (int j = 0; j < cols; j++) { int t; in >> t; cells[i][j].setType((CellType)t); }
+        std::cout << "Grid uploaded\n";
+    }
+};
+
+// === BUTTON ===
+struct Button {
+    sf::RectangleShape shape;
+    sf::Text label;
+    bool hover = false;
+    Button(float x, float y, float w, float h, const sf::Font& f, const std::string& txt) {
+        shape.setPosition(x, y);
+        shape.setSize({ w,h });
+        shape.setFillColor(sf::Color(200, 0, 0));
+        label.setFont(f); label.setString(txt);
+        label.setCharacterSize(16); label.setFillColor(sf::Color::White);
+        label.setPosition(x + 10, y + 10);
+    }
+    void updateHover(sf::Vector2f mousePos) {
+        hover = shape.getGlobalBounds().contains(mousePos);
+        shape.setFillColor(hover ? sf::Color(0, 200, 0) : sf::Color(200, 0, 0));
+    }
+    bool isClicked(sf::Vector2f mousePos, sf::Event& e) {
+        return hover && e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left;
+    }
+    void draw(sf::RenderWindow& w) { w.draw(shape); w.draw(label); }
+};
+
+// === SELECTBOX ===
+struct SelectBox {
+    sf::RectangleShape box;
+    sf::Text label;
+    std::vector<std::string> opts;
+    int idx = 0;
+    bool expanded = false;
+    sf::Font font;
+    SelectBox(float x, float y, float w, float h, const sf::Font& f, const std::vector<std::string>& o) :opts(o), font(f) {
+        box.setPosition(x, y);
+        box.setSize({ w,h });
+        box.setFillColor(sf::Color(70, 70, 70));
+        label.setFont(font);
+        label.setString(opts[0]);
+        label.setCharacterSize(14); 
+        label.setFillColor(sf::Color::White);
+        label.setPosition(x + 5, y + 5);
+    }
+    void update(sf::Vector2f m, sf::Event& e) {
+        if (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left) {
+            if (box.getGlobalBounds().contains(m)) expanded = !expanded;
+            else if (expanded) {
+                for (int i = 0; i < opts.size(); i++) {
+                    sf::FloatRect r(box.getPosition().x, box.getPosition().y + (i + 1) * box.getSize().y, box.getSize().x, box.getSize().y);
+                    if (r.contains(m)) { idx = i; label.setString(opts[i]); }
+                }
+                expanded = false;
+            }
+        }
+    }
+    std::string getSelected() { return opts[idx]; }
+    void draw(sf::RenderWindow& w) {
+        w.draw(box); w.draw(label);
+        if (expanded) {
+            for (int i = 0; i < opts.size(); i++) {
+                sf::RectangleShape r({ box.getSize().x,box.getSize().y });
+                r.setPosition(box.getPosition().x, box.getPosition().y + (i + 1) * box.getSize().y);
+                r.setFillColor(i == idx ? sf::Color(100, 100, 100) : sf::Color(50, 50, 50));
+                w.draw(r);
+                sf::Text t(opts[i], font, 14);
+                t.setPosition(r.getPosition().x + 5, r.getPosition().y + 5);
+                t.setFillColor(sf::Color::White);
+                w.draw(t);
+            }
+        }
+    }
+};
+
+// === DYNAMIC OBSTACLE ===
+struct DynamicObstacle {
+    sf::CircleShape shape;
+    sf::RectangleShape rect;
+    int r, c; int dr, dc; float size;
+    sf::Clock clock; // Her engelin kendi zaman sayacı
+    float moveInterval = 1.0f; //saniyede 1 kare
+    DynamicObstacle(int row, int col, bool horiz, float s) :r(row), c(col), dr(horiz ? 0 : 1), dc(horiz ? 1 : 0), size(s) {
+        shape.setRadius(s / 2 - 2);
+        shape.setOrigin(shape.getRadius(), shape.getRadius());
+        shape.setPosition(col * s + s / 2, row * s + s / 2);
+        shape.setFillColor(sf::Color(150,150,150));
+    }
+    void update(Grid& g) {
+        if (clock.getElapsedTime().asSeconds() < moveInterval)
+            return;
+        
+        clock.restart();
+
+        int nr = r + dr, nc = c + dc;
+        if (g.isWall(nr, nc)) 
+        { 
+            dr = -dr;
+            dc = -dc;
+            r = r +dr;
+            c = c +dc;
+            shape.setPosition(c * size + size / 2, r * size + size / 2);
+            return; 
+             
+        }
+        r = nr; c = nc;
+        shape.setPosition(c * size + size/2 , r * size +size/2 );
+    }
+    void draw(sf::RenderWindow& w) { w.draw(shape);} 
+};
+
+// === A* NODE ===
+struct Node { int r, c; float g, h; Node* parent; float f() const { return g + h; } };
+struct NodeCmp { bool operator()(Node* a, Node* b) { return a->f() > b->f(); } };
+
+// === A* PATHFINDING ===
+std::vector<sf::Vector2f> runAStar(Grid& grid, int sr, int sc, int gr, int gc, float cellSize) {
+    std::vector<std::vector<bool>> closed(grid.rows, std::vector<bool>(grid.cols, false));
+    std::priority_queue<Node*, std::vector<Node*>, NodeCmp> open;
+    std::vector<std::vector<Node*>> nodes(grid.rows, std::vector<Node*>(grid.cols, nullptr));
+
+    auto heuristic = [&](int r, int c) { return std::abs(r - gr) + std::abs(c - gc); };
+    Node* start = new Node{ sr,sc,0,(float)heuristic(sr,sc),nullptr };
+
+    open.push(start); nodes[sr][sc] = start;
+
+    int dr[4] = { 1,-1,0,0 }, dc[4] = { 0,0,1,-1 };
+    Node* goal = nullptr;
+
+    while (!open.empty()) {
+        Node* cur = open.top(); open.pop();
+        if (closed[cur->r][cur->c]) continue;
+        closed[cur->r][cur->c] = true;
+        if (cur->r == gr && cur->c == gc) { goal = cur; break; }
+
+        for (int i = 0; i < 4; i++) {
+            int nr = cur->r + dr[i], nc = cur->c + dc[i];
+            if (grid.isWall(nr, nc) || closed[nr][nc]) continue;
+            float ng = cur->g + 1;
+            if (!nodes[nr][nc] || ng < nodes[nr][nc]->g) {
+                Node* nxt = new Node{ nr,nc,ng,(float)heuristic(nr,nc),cur };
+                nodes[nr][nc] = nxt; open.push(nxt);
+            }
+        }
+    }
+
+    std::vector<sf::Vector2f> pts;
+    if (goal) {
+        Node* p = goal;
+        while (p) { pts.push_back({ p->c * cellSize + cellSize / 2,p->r * cellSize + cellSize / 2 }); p = p->parent; }
+        std::reverse(pts.begin(), pts.end());
+    }
+    for (auto& r : nodes)for (auto n : r)if (n)delete n;
+    return pts;
+}
+
+// === AGENT ===
+struct Agent {
+    sf::CircleShape shape;
+    int index = 0;
+    bool active = false;
+    std::vector<sf::Vector2f> path;
+    Agent(float radius = 10) { shape.setRadius(radius); shape.setOrigin(radius, radius); shape.setFillColor(sf::Color::Cyan); }
+    void setPath(const std::vector<sf::Vector2f>& p) { path = p; index = 0; active = !p.empty(); if (active) shape.setPosition(p[0]); }
+    void update() {
+        if (!active || index >= path.size() - 1) return;
+        sf::Vector2f cur = shape.getPosition(), target = path[index + 1];
+        sf::Vector2f dir = target - cur;
+        float dist = sqrt(dir.x * dir.x + dir.y * dir.y);
+        float speed = 0.8333f; // px/frame
+        if (dist < speed) { shape.setPosition(target); index++; if (index >= path.size() - 1) active = false; }
+        else shape.move(dir / dist * speed);
+    }
+    void draw(sf::RenderWindow& w) { if (!path.empty()) { for (size_t i = 1; i < path.size(); i++) { sf::RectangleShape seg; sf::Vector2f d = path[i] - path[i - 1]; float len = sqrt(d.x * d.x + d.y * d.y); float angle = atan2(d.y, d.x) * 180 / 3.1415; seg.setSize({ len,4 }); seg.setOrigin(0, 2); seg.setPosition(path[i - 1]); seg.setRotation(angle); seg.setFillColor(sf::Color(255, 255, 0, 180)); w.draw(seg); } } w.draw(shape); }
+};
+
+// === MAIN ===
+int main() {
+    const int rows = 9, cols = 9; const float cellSize = 50;
+    sf::RenderWindow win(sf::VideoMode(800, 600), "A* Pathfinding + Agent Movement");
+    win.setFramerateLimit(60);
+
+    sf::Font font; font.loadFromFile("arial.ttf");
+    Grid grid(rows, cols, cellSize);
+
+    sf::View ui(sf::FloatRect(0, 0, 200, 600));
+    ui.setViewport({ 0,0,200.f / 800.f,1 });
+    sf::RectangleShape panel({ 200,600 }); panel.setFillColor({ 50,50,50 });
+
+    Button saveBtn(20, 100, 160, 40, font, "Save");
+    Button loadBtn(20, 150, 160, 40, font, "Load");
+    Button runBtn(20, 200, 160, 40, font, "Run A*");
+
+    SelectBox modeBox(20, 50, 160, 30, font, {
+        "Duvar Çiz","Yatay Engel","Dikey Engel","Engel Sil","Set Start","Set Goal"
+        });
+
+    sf::View gridV(sf::FloatRect(0, 0, cols * cellSize, rows * cellSize));
+    gridV.setViewport({ 200.f / 800.f,0,600.f / 800.f,1 });
+
+    std::vector<DynamicObstacle> obs;
+    std::vector<sf::Vector2f> path;
+    Agent agent(10);
+
+    int sr = -1, sc = -1, gr = -1, gc = -1;
+
+    while (win.isOpen()) {
+        sf::Event e;
+        sf::Vector2i mpix = sf::Mouse::getPosition(win);
+        sf::Vector2f mouseUI = win.mapPixelToCoords(mpix, ui);
+
+        //UI güncellemesi (Her Frame)
+        saveBtn.updateHover(mouseUI);loadBtn.updateHover(mouseUI);runBtn.updateHover(mouseUI);
+        while (win.pollEvent(e)) {
+            if (e.type == sf::Event::Closed) win.close();
+            if (mpix.x < 200) {
+                modeBox.update(mouseUI, e);
+                
+                if (saveBtn.isClicked(mouseUI, e)) grid.saveToFile("grid.txt");
+                if (loadBtn.isClicked(mouseUI, e)) grid.loadFromFile("grid.txt");
+                if (runBtn.isClicked(mouseUI, e) && sr != -1 && gr != -1) {
+                    path = runAStar(grid, sr, sc, gr, gc, cellSize);
+                    agent.setPath(path);
+                }
+            }
+            else if (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left) {
+                sf::Vector2f wp = win.mapPixelToCoords(mpix, gridV);
+                int c = wp.x / cellSize, r = wp.y / cellSize;
+                std::string mode = modeBox.getSelected();
+
+                if (mode == "Duvar Çiz") grid.toggleWall(r, c);
+                else if (mode == "Yatay Engel" || mode == "Dikey Engel") { bool horiz = (mode == "Yatay Engel"); obs.push_back(DynamicObstacle(r, c, horiz, cellSize)); }
+                else if (mode == "Engel Sil") { for (size_t i = 0; i < obs.size(); i++) if (obs[i].r == r && obs[i].c == c) { obs.erase(obs.begin() + i); break; } }
+                else if (mode == "Set Start") { if (sr != -1 && sc != -1)grid.cells[sr][sc].setType(EMPTY); sr = r; sc = c; grid.cells[r][c].setType(START);
+            }
+                else if (mode == "Set Goal") { if (gr != -1 && gc != -1)grid.cells[gr][gc].setType(EMPTY); gr = r; gc = c; grid.cells[r][c].setType(GOAL); }
+            }
+        }
+
+        for (auto& o : obs) o.update(grid);
+        agent.update();
+
+        win.clear();
+        win.setView(ui); win.draw(panel); saveBtn.draw(win); loadBtn.draw(win); runBtn.draw(win); modeBox.draw(win);
+        win.setView(gridV); grid.draw(win); for (auto& o : obs) o.draw(win); agent.draw(win);
+        win.display();
+    }
+}
