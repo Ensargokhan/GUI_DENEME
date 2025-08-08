@@ -308,8 +308,8 @@
 
         float cellSize; // Hücre boyutunu sakla
 
-        DynamicObstacle(int rr, int cc, bool horiz, float sz) :
-            start_r(rr), start_c(cc),r(rr),c(cc), dr(horiz ? 0 : 1), dc(horiz ? 1 : 0), interval(1.0f),cellSize(sz)
+            DynamicObstacle(int rr, int cc, bool horiz, float sz) :
+        start_r(rr), start_c(cc),r(rr),c(cc), dr(horiz ? 0 : 1), dc(horiz ? 1 : 0), interval(2.0f),cellSize(sz)
         {
             shape.setRadius(sz / 3);
             shape.setOrigin(shape.getRadius(), shape.getRadius());
@@ -397,45 +397,45 @@
     };
 
     void computeSafeIntervals(GridMap& gm, const vector<DynamicObstacle>& obs) {
-        // Tüm hücreleri tam erişilebilirlikle başlat
-        for (int i = 0; i < gm.rows; i++) {
-            for (int j = 0; j < gm.cols; j++) {
-                gm.safe[i][j].clear();
-                if (!gm.isWall(i, j)) {
-                    gm.addSafe(i, j, 0, 1e9);
-                }
-            }
-        }
-
-        const float PLANNING_HORIZON = 50.0f; // Daha uzun planlama ufku
-        const float SAFETY_MARGIN = 0.1f; // Güvenlik marjı
-        
-        // Her engel için güvenli aralıkları engelle
-        for (const auto& o : obs) 
-        {
-            if (o.path.empty()) continue;
-            
-            float cycle_duration = o.path.size() * o.interval;
-            if (cycle_duration <= 0) continue;
-            
-            float current_time = 0.0f;
-            while(current_time < PLANNING_HORIZON)
-            {
-                // Engelin bir döngüsündeki her adımı işle
-                for(size_t i = 0; i < o.path.size(); i++)
-                {
-                    const auto& p = o.path[i];
-                    float block_start = current_time + i * o.interval - SAFETY_MARGIN;
-                    float block_end = current_time + (i + 1) * o.interval + SAFETY_MARGIN;
-
-                    if (block_start > PLANNING_HORIZON) break;
-
-                    gm.blockCell(p.first, p.second, block_start, block_end);
-                }
-                current_time += cycle_duration;
+    // Tüm hücreleri tam erişilebilirlikle başlat
+    for (int i = 0; i < gm.rows; i++) {
+        for (int j = 0; j < gm.cols; j++) {
+            gm.safe[i][j].clear();
+            if (!gm.isWall(i, j)) {
+                gm.addSafe(i, j, 0, 1e9);
             }
         }
     }
+
+    const float PLANNING_HORIZON = 30.0f; // Planlama ufku
+    const float SAFETY_MARGIN = 0.5f; // Güvenlik marjı - engellerle çarpışmayı önlemek için
+    
+    // Her engel için güvenli aralıkları engelle
+    for (const auto& o : obs) 
+    {
+        if (o.path.empty()) continue;
+        
+        float cycle_duration = o.path.size() * o.interval;
+        if (cycle_duration <= 0) continue;
+        
+        float current_time = 0.0f;
+        while(current_time < PLANNING_HORIZON)
+        {
+            // Engelin bir döngüsündeki her adımı işle
+            for(size_t i = 0; i < o.path.size(); i++)
+            {
+                const auto& p = o.path[i];
+                float block_start = current_time + i * o.interval - SAFETY_MARGIN;
+                float block_end = current_time + (i + 1) * o.interval + SAFETY_MARGIN;
+
+                if (block_start > PLANNING_HORIZON) break;
+
+                gm.blockCell(p.first, p.second, block_start, block_end);
+            }
+            current_time += cycle_duration;
+        }
+    }
+}
 
     const int d4r[4] = { 1, -1, 0, 0 }, d4c[4] = { 0, 0, 1, -1 };
 
@@ -945,10 +945,10 @@
                 }
             }
 
-            // Update simulation
-            if (simulating) {
-                float dt = simClock.restart().asSeconds();
-                simTime += dt;
+                    // Update simulation
+        if (simulating) {
+            float dt = simClock.restart().asSeconds();
+            simTime += dt * 0.5f; // Simülasyon hızını yavaşlat - saniyede 1 kare
 
                 // Update obstacles
                 for (auto& o : obstacles) {
