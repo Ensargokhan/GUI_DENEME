@@ -634,10 +634,12 @@
     }
 
     struct Agent {
-        sf::CircleShape shape;
-        vector<pair<sf::Vector2f, float>> path; // Konum ve zaman
-        float simTime = 0;
-        bool active = false;
+    sf::CircleShape shape;
+    vector<pair<sf::Vector2f, float>> path; // Konum ve zaman
+    float simTime = 0;
+    bool active = false;
+    int currentCellR = -1, currentCellC = -1; // Mevcut hücre pozisyonu
+    float lastReplanTime = 0; // Son replan zamanı
 
         Agent(float r = 10) {
             shape.setRadius(r);
@@ -645,56 +647,97 @@
             shape.setFillColor(sf::Color::Cyan);
         }
 
-            void setPath(const vector<pair<sf::Vector2f, float>>& p) {
-        path = p;
-        simTime = 0;
-        active = !p.empty();
-        if (active) {
-            shape.setPosition(path[0].first);
-            cout << "AGENT PATH SET! Size: " << path.size() << endl;
-            cout << "AGENT START: (" << path[0].first.x << ", " << path[0].first.y << ") at time " << path[0].second << endl;
-            cout << "AGENT END: (" << path.back().first.x << ", " << path.back().first.y << ") at time " << path.back().second << endl;
-        } else {
-            cout << "AGENT PATH CLEARED!" << endl;
-        }
-    }
-
-            void update(float dt) {
-        if (!active || path.size() < 2) {
-            cout << "AGENT NOT ACTIVE OR PATH TOO SMALL! active=" << active << " path.size=" << path.size() << endl;
-            return;
-        }
-
-        simTime += dt;
-
-        // Hedefe ulaştı
-        if (simTime >= path.back().second) {
-            shape.setPosition(path.back().first);
-            active = false;
-            cout << "AGENT REACHED GOAL!" << endl;
-            return;
-        }
-
-        // Basit interpolasyon - path boyunca hareket et
-        for (int i = 0; i < path.size() - 1; i++) {
-            if (simTime >= path[i].second && simTime < path[i + 1].second) {
-                float t0 = path[i].second;
-                float t1 = path[i + 1].second;
-                float factor = (simTime - t0) / (t1 - t0);
-                
-                sf::Vector2f pos = path[i].first + factor * (path[i + 1].first - path[i].first);
-                shape.setPosition(pos);
-                
-                // Debug: Her 1 saniyede bir pozisyon yazdır
-                static float lastDebugTime = 0;
-                if (simTime - lastDebugTime > 1.0f) {
-                    cout << "AGENT at time " << simTime << ": pos=(" << pos.x << "," << pos.y << ") segment=" << i << endl;
-                    lastDebugTime = simTime;
-                }
-                break;
+                    void setPath(const vector<pair<sf::Vector2f, float>>& p) {
+            path = p;
+            simTime = 0;
+            active = !p.empty();
+            if (active) {
+                shape.setPosition(path[0].first);
+                // Başlangıç hücre pozisyonunu ayarla
+                currentCellR = static_cast<int>(path[0].first.y / 50); // cellSize = 50
+                currentCellC = static_cast<int>(path[0].first.x / 50);
+                cout << "AGENT PATH SET! Size: " << path.size() << endl;
+                cout << "AGENT START: (" << path[0].first.x << ", " << path[0].first.y << ") cell=(" << currentCellR << "," << currentCellC << ") at time " << path[0].second << endl;
+                cout << "AGENT END: (" << path.back().first.x << ", " << path.back().first.y << ") at time " << path.back().second << endl;
+            } else {
+                cout << "AGENT PATH CLEARED!" << endl;
             }
         }
-    }
+
+                    void update(float dt, GridMap& gm, int goalR, int goalC, float cellSize, const vector<DynamicObstacle>& obstacles) {
+            if (!active || path.size() < 2) {
+                cout << "AGENT NOT ACTIVE OR PATH TOO SMALL! active=" << active << " path.size=" << path.size() << endl;
+                return;
+            }
+
+            simTime += dt;
+
+            // Hedefe ulaştı
+            if (simTime >= path.back().second) {
+                shape.setPosition(path.back().first);
+                active = false;
+                cout << "AGENT REACHED GOAL!" << endl;
+                return;
+            }
+
+            // Basit interpolasyon - path boyunca hareket et
+            for (int i = 0; i < path.size() - 1; i++) {
+                if (simTime >= path[i].second && simTime < path[i + 1].second) {
+                    float t0 = path[i].second;
+                    float t1 = path[i + 1].second;
+                    float factor = (simTime - t0) / (t1 - t0);
+                    
+                    sf::Vector2f pos = path[i].first + factor * (path[i + 1].first - path[i].first);
+                    shape.setPosition(pos);
+                    
+                    // Mevcut hücre pozisyonunu güncelle
+                    int newCellR = static_cast<int>(pos.y / cellSize);
+                    int newCellC = static_cast<int>(pos.x / cellSize);
+                    
+                    // Hücre değiştiyse replan kontrolü yap
+                    if (newCellR != currentCellR || newCellC != currentCellC) {
+                        currentCellR = newCellR;
+                        currentCellC = newCellC;
+                        
+                        // Her 2 saniyede bir replan yap
+                        if (simTime - lastReplanTime > 2.0f) {
+                            replan(gm, goalR, goalC, cellSize);
+                        }
+                    }
+                    
+                    // Debug: Her 1 saniyede bir pozisyon yazdır
+                    static float lastDebugTime = 0;
+                    if (simTime - lastDebugTime > 1.0f) {
+                        cout << "AGENT at time " << simTime << ": pos=(" << pos.x << "," << pos.y << ") cell=(" << currentCellR << "," << currentCellC << ") segment=" << i << endl;
+                        lastDebugTime = simTime;
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Replan fonksiyonu - yeni path hesaplar
+        bool replan(GridMap& gm, int goalR, int goalC, float cellSize) {
+            if (currentCellR < 0 || currentCellC < 0) return false;
+            
+            cout << "REPLANNING from (" << currentCellR << "," << currentCellC << ") to (" << goalR << "," << goalC << ") at time " << simTime << endl;
+            
+            // Yeni safe interval'ları hesapla
+            computeSafeIntervals(gm, obstacles);
+            
+            // SIPP ile yeni path bul
+            SIPP_Result result = runSIPP(gm, currentCellR, currentCellC, goalR, goalC, cellSize);
+            
+            if (!result.path.empty()) {
+                setPath(result.path);
+                lastReplanTime = simTime;
+                cout << "REPLAN SUCCESS! New path size: " << result.path.size() << endl;
+                return true;
+            } else {
+                cout << "REPLAN FAILED! No path found!" << endl;
+                return false;
+            }
+        }
 
         void draw(sf::RenderWindow& w) {
             // Yolu çiz - daha kalın ve görünür yap
@@ -976,11 +1019,13 @@
                     o.update(simTime);
                 }
 
-                // Update agent
-                agent.update(dt);
-                if (!agent.active) {
-                    simulating = false; //Ajan hedefe ulaşınca simülasyonu bitir
-                }
+                            // Update agent with replanning
+            if (gm) {
+                agent.update(dt, *gm, goalR, goalC, cellSize, obstacles);
+            }
+            if (!agent.active) {
+                simulating = false; //Ajan hedefe ulaşınca simülasyonu bitir
+            }
             }
             else {
                 // Edit mode obstacle updates
