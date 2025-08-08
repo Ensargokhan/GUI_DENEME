@@ -325,7 +325,7 @@
         float cellSize; // Hücre boyutunu sakla
 
             DynamicObstacle(int rr, int cc, bool horiz, float sz) :
-        start_r(rr), start_c(cc),r(rr),c(cc), dr(horiz ? 0 : 1), dc(horiz ? 1 : 0), interval(2.0f),cellSize(sz)
+        start_r(rr), start_c(cc), r(rr), c(cc), dr(horiz ? 0 : 1), dc(horiz ? 1 : 0), interval(2.0f), cellSize(sz)
         {
             shape.setRadius(sz / 3);
             shape.setOrigin(shape.getRadius(), shape.getRadius());
@@ -423,8 +423,8 @@
         }
     }
 
-    const float PLANNING_HORIZON = 50.0f; // Daha uzun planlama ufku
-    const float SAFETY_MARGIN = 1.0f; // Daha büyük güvenlik marjı - engellerle çarpışmayı önlemek için
+    const float PLANNING_HORIZON = 30.0f; // Planlama ufku
+    const float SAFETY_MARGIN = 0.3f; // Güvenlik marjı - engellerle çarpışmayı önlemek için
     
     // Her engel için güvenli aralıkları engelle
     for (const auto& o : obs) 
@@ -678,7 +678,7 @@
             if (path.size() < 2) {
                 cout << "PATH TOO SMALL! Size: " << path.size() << " - Attempting replan..." << endl;
                 // Path çok küçükse replan yap
-                if (simTime - lastReplanTime > 1.0f) {
+                if (simTime - lastReplanTime > 3.0f) {
                     replan(gm, goalR, goalC, cellSize, obstacles);
                 }
                 return;
@@ -713,15 +713,15 @@
                         currentCellR = newCellR;
                         currentCellC = newCellC;
                         
-                        // Her 2 saniyede bir replan yap
-                        if (simTime - lastReplanTime > 2.0f) {
+                        // Her 5 saniyede bir replan yap
+                        if (simTime - lastReplanTime > 5.0f) {
                             replan(gm, goalR, goalC, cellSize, obstacles);
                         }
                     }
                     
-                    // Debug: Her 1 saniyede bir pozisyon yazdır
+                    // Debug: Her 3 saniyede bir pozisyon yazdır
                     static float lastDebugTime = 0;
-                    if (simTime - lastDebugTime > 1.0f) {
+                    if (simTime - lastDebugTime > 3.0f) {
                         cout << "AGENT at time " << simTime << ": pos=(" << pos.x << "," << pos.y << ") cell=(" << currentCellR << "," << currentCellC << ") segment=" << i << endl;
                         lastDebugTime = simTime;
                     }
@@ -1032,7 +1032,7 @@
                     // Update simulation
         if (simulating) {
             float dt = simClock.restart().asSeconds();
-            simTime += dt * 0.5f; // Simülasyon hızını yavaşlat - saniyede 1 kare
+            simTime += dt * 2.0f; // Simülasyon hızını artır - daha hızlı hareket
 
                 // Update obstacles
                 for (auto& o : obstacles) {
