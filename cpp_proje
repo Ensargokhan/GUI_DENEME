@@ -325,7 +325,7 @@
         float cellSize; // Hücre boyutunu sakla
 
             DynamicObstacle(int rr, int cc, bool horiz, float sz) :
-        start_r(rr), start_c(cc), r(rr), c(cc), dr(horiz ? 0 : 1), dc(horiz ? 1 : 0), interval(2.0f), cellSize(sz)
+        start_r(rr), start_c(cc), r(rr), c(cc), dr(horiz ? 0 : 1), dc(horiz ? 1 : 0), interval(4.0f), cellSize(sz)
         {
             shape.setRadius(sz / 3);
             shape.setOrigin(shape.getRadius(), shape.getRadius());
@@ -423,8 +423,8 @@
         }
     }
 
-    const float PLANNING_HORIZON = 30.0f; // Planlama ufku
-    const float SAFETY_MARGIN = 0.3f; // Güvenlik marjı - engellerle çarpışmayı önlemek için
+    const float PLANNING_HORIZON = 40.0f; // Planlama ufku
+    const float SAFETY_MARGIN = 0.8f; // Güvenlik marjı - engellerle çarpışmayı önlemek için
     
     // Her engel için güvenli aralıkları engelle
     for (const auto& o : obs) 
@@ -669,7 +669,23 @@
             }
         }
 
-                    void update(float dt, GridMap& gm, int goalR, int goalC, float cellSize, const vector<DynamicObstacle>& obstacles) {
+                    // Collision detection fonksiyonu
+        bool checkCollision(const vector<DynamicObstacle>& obstacles, float currentTime) {
+            for (const auto& obs : obstacles) {
+                // Engel ile agent arasındaki mesafeyi hesapla
+                float dx = shape.getPosition().x - obs.shape.getPosition().x;
+                float dy = shape.getPosition().y - obs.shape.getPosition().y;
+                float distance = sqrt(dx*dx + dy*dy);
+                
+                // Eğer çok yakınsa collision var
+                if (distance < (shape.getRadius() + obs.shape.getRadius() + 5)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        void update(float dt, GridMap& gm, int goalR, int goalC, float cellSize, const vector<DynamicObstacle>& obstacles) {
             if (!active) {
                 cout << "AGENT NOT ACTIVE!" << endl;
                 return;
@@ -702,7 +718,15 @@
                     float factor = (simTime - t0) / (t1 - t0);
                     
                     sf::Vector2f pos = path[i].first + factor * (path[i + 1].first - path[i].first);
+                    
+                    // Collision kontrolü - eğer collision varsa hareket etme
                     shape.setPosition(pos);
+                    if (checkCollision(obstacles, simTime)) {
+                        cout << "COLLISION DETECTED! Agent waiting at time " << simTime << endl;
+                        // Pozisyonu geri al ve bekle
+                        shape.setPosition(path[i].first);
+                        break;
+                    }
                     
                     // Mevcut hücre pozisyonunu güncelle
                     int newCellR = static_cast<int>(pos.y / cellSize);
@@ -1032,7 +1056,7 @@
                     // Update simulation
         if (simulating) {
             float dt = simClock.restart().asSeconds();
-            simTime += dt * 2.0f; // Simülasyon hızını artır - daha hızlı hareket
+            simTime += dt * 0.5f; // Simülasyon hızını yavaşlat - saniyede 1 kare
 
                 // Update obstacles
                 for (auto& o : obstacles) {
