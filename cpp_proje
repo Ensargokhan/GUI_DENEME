@@ -679,7 +679,7 @@
                 cout << "PATH TOO SMALL! Size: " << path.size() << " - Attempting replan..." << endl;
                 // Path çok küçükse replan yap
                 if (simTime - lastReplanTime > 1.0f) {
-                    replan(gm, goalR, goalC, cellSize);
+                    replan(gm, goalR, goalC, cellSize, obstacles);
                 }
                 return;
             }
@@ -715,7 +715,7 @@
                         
                         // Her 2 saniyede bir replan yap
                         if (simTime - lastReplanTime > 2.0f) {
-                            replan(gm, goalR, goalC, cellSize);
+                            replan(gm, goalR, goalC, cellSize, obstacles);
                         }
                     }
                     
@@ -731,7 +731,7 @@
         }
 
         // Replan fonksiyonu - yeni path hesaplar
-        bool replan(GridMap& gm, int goalR, int goalC, float cellSize) {
+        bool replan(GridMap& gm, int goalR, int goalC, float cellSize, const vector<DynamicObstacle>& obstacles) {
             if (currentCellR < 0 || currentCellC < 0) return false;
             
             cout << "REPLANNING from (" << currentCellR << "," << currentCellC << ") to (" << goalR << "," << goalC << ") at time " << simTime << endl;
