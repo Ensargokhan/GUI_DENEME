@@ -423,8 +423,8 @@
         }
     }
 
-    const float PLANNING_HORIZON = 30.0f; // Planlama ufku
-    const float SAFETY_MARGIN = 0.5f; // Güvenlik marjı - engellerle çarpışmayı önlemek için
+    const float PLANNING_HORIZON = 50.0f; // Daha uzun planlama ufku
+    const float SAFETY_MARGIN = 1.0f; // Daha büyük güvenlik marjı - engellerle çarpışmayı önlemek için
     
     // Her engel için güvenli aralıkları engelle
     for (const auto& o : obs) 
@@ -480,8 +480,11 @@
                 // 3. Komşuya varmak için mevcut hücreden ne zaman ayrılmamız gerekir?
                 float required_departure_from_current = earliest_arrival_at_neighbour - moveCost;
 
-                // 4. Bu ayrılış zamanı şu an bulunduğumuz hücrenin güvenli aralığı içinde mi?
-                if (required_departure_from_current > s->interval.end) continue;
+                            // 4. Bu ayrılış zamanı şu an bulunduğumuz hücrenin güvenli aralığı içinde mi?
+            if (required_departure_from_current > s->interval.end) continue;
+            
+            // 5. Ek güvenlik kontrolü - hareket sırasında collision var mı?
+            if (required_departure_from_current < s->interval.start) continue;
 
                             // Tüm kontrollerden geçtiyse bu geçerli bir adımdır.
             auto succ = make_shared<State>();
@@ -613,7 +616,9 @@
         }
         else
         {
-            cout << "Yol bulunamadı!" << endl;
+            cout << "Yol bulunamadı! Başlangıç: (" << sr << "," << sc << ") Hedef: (" << gr << "," << gc << ")" << endl;
+            cout << "Başlangıç hücresinin safe interval sayısı: " << gm.safe[sr][sc].size() << endl;
+            cout << "Hedef hücresinin safe interval sayısı: " << gm.safe[gr][gc].size() << endl;
         }
         
         // Closed listi doldur
@@ -665,8 +670,17 @@
         }
 
                     void update(float dt, GridMap& gm, int goalR, int goalC, float cellSize, const vector<DynamicObstacle>& obstacles) {
-            if (!active || path.size() < 2) {
-                cout << "AGENT NOT ACTIVE OR PATH TOO SMALL! active=" << active << " path.size=" << path.size() << endl;
+            if (!active) {
+                cout << "AGENT NOT ACTIVE!" << endl;
+                return;
+            }
+            
+            if (path.size() < 2) {
+                cout << "PATH TOO SMALL! Size: " << path.size() << " - Attempting replan..." << endl;
+                // Path çok küçükse replan yap
+                if (simTime - lastReplanTime > 1.0f) {
+                    replan(gm, goalR, goalC, cellSize);
+                }
                 return;
             }
 
@@ -725,6 +739,10 @@
             // Yeni safe interval'ları hesapla
             computeSafeIntervals(gm, obstacles);
             
+            // Mevcut hücrenin safe interval'larını kontrol et
+            cout << "Current cell (" << currentCellR << "," << currentCellC << ") safe intervals: " << gm.safe[currentCellR][currentCellC].size() << endl;
+            cout << "Goal cell (" << goalR << "," << goalC << ") safe intervals: " << gm.safe[goalR][goalC].size() << endl;
+            
             // SIPP ile yeni path bul
             SIPP_Result result = runSIPP(gm, currentCellR, currentCellC, goalR, goalC, cellSize);
             
@@ -735,6 +753,8 @@
                 return true;
             } else {
                 cout << "REPLAN FAILED! No path found!" << endl;
+                // Path bulunamazsa agent'ı durdur
+                active = false;
                 return false;
             }
         }
