@@ -630,31 +630,34 @@
             shape.setFillColor(sf::Color::Cyan);
         }
 
-        void setPath(const vector<pair<sf::Vector2f, float>>& p) {
-            path = p;
-            simTime = 0;
-            active = !p.empty();
-            if (active) {
-                shape.setPosition(path[0].first);
-                cout << "Agent path set! Size: " << path.size() << endl;
-                cout << "Starting position: (" << path[0].first.x << ", " << path[0].first.y << ") at time " << path[0].second << endl;
-                if (path.size() > 1) {
-                    cout << "End position: (" << path.back().first.x << ", " << path.back().first.y << ") at time " << path.back().second << endl;
-                }
-            } else {
-                cout << "Agent path cleared!" << endl;
-            }
+            void setPath(const vector<pair<sf::Vector2f, float>>& p) {
+        path = p;
+        simTime = 0;
+        active = !p.empty();
+        if (active) {
+            shape.setPosition(path[0].first);
+            cout << "AGENT PATH SET! Size: " << path.size() << endl;
+            cout << "AGENT START: (" << path[0].first.x << ", " << path[0].first.y << ") at time " << path[0].second << endl;
+            cout << "AGENT END: (" << path.back().first.x << ", " << path.back().first.y << ") at time " << path.back().second << endl;
+        } else {
+            cout << "AGENT PATH CLEARED!" << endl;
         }
+    }
 
             void update(float dt) {
-        if (!active || path.size() < 2) return;
+        if (!active || path.size() < 2) {
+            cout << "AGENT NOT ACTIVE OR PATH TOO SMALL! active=" << active << " path.size=" << path.size() << endl;
+            return;
+        }
 
         simTime += dt;
+        cout << "AGENT UPDATE: simTime=" << simTime << " dt=" << dt << endl;
 
         // Hedefe ulaştı
         if (simTime >= path.back().second) {
             shape.setPosition(path.back().first);
             active = false;
+            cout << "AGENT REACHED GOAL!" << endl;
             return;
         }
 
@@ -667,6 +670,7 @@
                 
                 sf::Vector2f pos = path[i].first + factor * (path[i + 1].first - path[i].first);
                 shape.setPosition(pos);
+                cout << "AGENT MOVING: segment " << i << " factor=" << factor << " pos=(" << pos.x << "," << pos.y << ")" << endl;
                 break;
             }
         }
@@ -853,9 +857,14 @@
                             // Compute safe intervals and run SIPP
                             computeSafeIntervals(*gm, obstacles);
                             
-                            SIPP_Result result = runSIPP(*gm, startR, startC, goalR, goalC, cellSize);
-                            
-                            agent.setPath(result.path);
+                                                    SIPP_Result result = runSIPP(*gm, startR, startC, goalR, goalC, cellSize);
+                        
+                        cout << "RESULT PATH SIZE: " << result.path.size() << endl;
+                        for(int i = 0; i < result.path.size(); i++) {
+                            cout << "Path[" << i << "]: (" << result.path[i].first.x << "," << result.path[i].first.y << ") at " << result.path[i].second << endl;
+                        }
+                        
+                        agent.setPath(result.path);
                             
                             //Eski görselleştirme şekillerini temizle
                             open_list_shapes.clear();
