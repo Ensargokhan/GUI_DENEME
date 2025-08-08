@@ -273,30 +273,46 @@
             safe[r][c] = updated;
         }
 
-        void drawSafeIntervals(sf::RenderWindow& win, float cellSize) {
-            sf::Font font;
-            if (!font.loadFromFile("arial.ttf")) return;
+            void drawSafeIntervals(sf::RenderWindow& win, float cellSize) {
+        sf::Font font;
+        if (!font.loadFromFile("arial.ttf")) return;
 
-            for (int r = 0; r < rows; r++) {
-                for (int c = 0; c < cols; c++) {
-                    for (size_t i = 0; i < safe[r][c].size(); i++) {
-                        const auto& ival = safe[r][c][i];
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < cols; c++) {
+                if (safe[r][c].empty()) continue;
+                
+                // Cell ID'sini yazdır
+                stringstream cellId;
+                cellId << "(" << r << "," << c << ")";
+                
+                sf::Text cellText;
+                cellText.setFont(font);
+                cellText.setString(cellId.str());
+                cellText.setCharacterSize(8);
+                cellText.setFillColor(sf::Color::Red);
+                cellText.setPosition(c * cellSize + 2, r * cellSize + 2);
+                win.draw(cellText);
+                
+                // Safe interval'ları yazdır
+                for (size_t i = 0; i < safe[r][c].size(); i++) {
+                    const auto& ival = safe[r][c][i];
 
-                        stringstream ss;
-                        ss << fixed << setprecision(1) << "[" << ival.start << "-" << ival.end << "]";
+                    stringstream ss;
+                    ss << "SI" << i << ":[";
+                    ss << fixed << setprecision(1) << ival.start << "," << ival.end << "]";
 
-                        sf::Text text;
-                        text.setFont(font);
-                        text.setString(ss.str());
-                        text.setCharacterSize(10);
-                        text.setFillColor(sf::Color::Blue);
-                        text.setPosition(c * cellSize + 5, r * cellSize + 5 + i * 12);
+                    sf::Text text;
+                    text.setFont(font);
+                    text.setString(ss.str());
+                    text.setCharacterSize(8);
+                    text.setFillColor(sf::Color::Blue);
+                    text.setPosition(c * cellSize + 5, r * cellSize + 15 + i * 10);
 
-                        win.draw(text);
-                    }
+                    win.draw(text);
                 }
             }
         }
+    }
     }; 
 
     struct DynamicObstacle {
@@ -467,17 +483,17 @@
                 // 4. Bu ayrılış zamanı şu an bulunduğumuz hücrenin güvenli aralığı içinde mi?
                 if (required_departure_from_current > s->interval.end) continue;
 
-                // Tüm kontrollerden geçtiyse bu geçerli bir adımdır.
-                auto succ = make_shared<State>();
-                succ->r = nr;
-                succ->c = nc;
-                succ->time = earliest_arrival_at_neighbour;
-                succ->g = earliest_arrival_at_neighbour;
-                succ->h = std::abs(nr - gr) + std::abs(nc - gc);
-                succ->interval = succ_interval;
-                succ->parent = s;
+                            // Tüm kontrollerden geçtiyse bu geçerli bir adımdır.
+            auto succ = make_shared<State>();
+            succ->r = nr;
+            succ->c = nc;
+            succ->time = earliest_arrival_at_neighbour;
+            succ->g = s->g + moveCost; // Toplam maliyet = mevcut maliyet + hareket maliyeti
+            succ->h = std::abs(nr - gr) + std::abs(nc - gc);
+            succ->interval = succ_interval;
+            succ->parent = s;
 
-                successors.push_back(succ);
+            successors.push_back(succ);
             }
         }
 
@@ -488,14 +504,14 @@
             // Eğer bu aralık mevcut aralıktan sonra başlıyorsa ve mevcut zamandan sonra başlıyorsa
             if (wait_interval.start > s->time && wait_interval.start > s->interval.start) 
             {
-                auto wait_succ = make_shared<State>();
-                wait_succ->r = s->r;
-                wait_succ->c = s->c;
-                wait_succ->time = wait_interval.start;
-                wait_succ->g = wait_interval.start; // Bekleme süresi de maliyettir
-                wait_succ->h = std::abs(s->r - gr) + std::abs(s->c - gc);
-                wait_succ->interval = wait_interval;
-                wait_succ->parent = s;
+                            auto wait_succ = make_shared<State>();
+            wait_succ->r = s->r;
+            wait_succ->c = s->c;
+            wait_succ->time = wait_interval.start;
+            wait_succ->g = s->g + (wait_interval.start - s->time); // Toplam maliyet = mevcut maliyet + bekleme süresi
+            wait_succ->h = std::abs(s->r - gr) + std::abs(s->c - gc);
+            wait_succ->interval = wait_interval;
+            wait_succ->parent = s;
 
                 successors.push_back(wait_succ);
             }
@@ -650,7 +666,6 @@
         }
 
         simTime += dt;
-        cout << "AGENT UPDATE: simTime=" << simTime << " dt=" << dt << endl;
 
         // Hedefe ulaştı
         if (simTime >= path.back().second) {
@@ -669,7 +684,13 @@
                 
                 sf::Vector2f pos = path[i].first + factor * (path[i + 1].first - path[i].first);
                 shape.setPosition(pos);
-                cout << "AGENT MOVING: segment " << i << " factor=" << factor << " pos=(" << pos.x << "," << pos.y << ")" << endl;
+                
+                // Debug: Her 1 saniyede bir pozisyon yazdır
+                static float lastDebugTime = 0;
+                if (simTime - lastDebugTime > 1.0f) {
+                    cout << "AGENT at time " << simTime << ": pos=(" << pos.x << "," << pos.y << ") segment=" << i << endl;
+                    lastDebugTime = simTime;
+                }
                 break;
             }
         }
@@ -977,22 +998,20 @@
             window.setView(gridView);
             grid.draw(window);
 
-            // Draw safe intervals (for debugging)
-            if (startR >= 0 && goalR >= 0) {
-                GridMap gm(rows, cols);
-                for (int r = 0; r < rows; r++) {
-                    for (int c = 0; c < cols; c++) {
-                        gm.cells[r][c] = grid.cells[r][c].type;
-                    }
-                }
-                for (auto& o : obstacles) {
-                    o.computePath(grid);
-                }
-                computeSafeIntervals(gm, obstacles);
-                if (showSafeIntervals) {
-                    gm.drawSafeIntervals(window, cellSize);
+                    // Draw safe intervals (for debugging)
+        if (startR >= 0 && goalR >= 0) {
+            GridMap gm(rows, cols);
+            for (int r = 0; r < rows; r++) {
+                for (int c = 0; c < cols; c++) {
+                    gm.cells[r][c] = grid.cells[r][c].type;
                 }
             }
+            for (auto& o : obstacles) {
+                o.computePath(grid);
+            }
+            computeSafeIntervals(gm, obstacles);
+            gm.drawSafeIntervals(window, cellSize); // Her zaman göster
+        }
 
             // Draw obstacles
             for (auto& o : obstacles) {
