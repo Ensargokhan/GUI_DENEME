@@ -579,21 +579,20 @@
 
         SIPP_Result result;
 
-        vector<pair<sf::Vector2f, float>> path;
         if (goal_node) {
             auto p = goal_node;
             while (p) {
-                path.emplace_back(
+                result.path.emplace_back(
                     sf::Vector2f(p->c * cellSize + cellSize / 2, p->r * cellSize + cellSize / 2),
                     p->time
                 );
                 p = p->parent;
             }
-            reverse(path.begin(), path.end());
+            reverse(result.path.begin(), result.path.end());
             
-            cout << "Path oluşturuldu, " << path.size() << " nokta" << endl;
-            for (size_t i = 0; i < path.size(); i++) {
-                cout << "  " << i << ": (" << path[i].first.x << "," << path[i].first.y << ") at " << path[i].second << endl;
+            cout << "Path oluşturuldu, " << result.path.size() << " nokta" << endl;
+            for (size_t i = 0; i < result.path.size(); i++) {
+                cout << "  " << i << ": (" << result.path[i].first.x << "," << result.path[i].first.y << ") at " << result.path[i].second << endl;
             }
         }
         else
