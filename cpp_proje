@@ -600,7 +600,7 @@ void getSuccessors(const shared_ptr<State>& s, GridMap& gm, vector<shared_ptr<St
 
     // YENİ: Daha esnek bekleme stratejileri - koridor geçişleri için
     // 0.5, 1.5, 2.5 gibi farklı bekleme süreleri dene
-    for (float wait_multiplier = 0.5f; wait_multiplier <= 3.0f; wait_multiplier += 0.5f) {
+    for (float wait_multiplier = 0.5f; wait_multiplier <= 4.0f; wait_multiplier += 0.5f) { // 4 saniyeye kadar
         float wait_step = wait_multiplier;
         float target_time = s->time + wait_step;
         if (target_time <= s->interval.end + 1e-4f) {
@@ -619,6 +619,28 @@ void getSuccessors(const shared_ptr<State>& s, GridMap& gm, vector<shared_ptr<St
             wait_flexible->interval = s->interval;
             wait_flexible->parent = s;
             successors.push_back(wait_flexible);
+        }
+    }
+    
+    // YENİ: Çok uzun bekleme süreleri (geniş koridorlarda dinamik engellerin geçmesini beklemek için)
+    for (float wait_time = 4.5f; wait_time <= 8.0f; wait_time += 0.5f) {
+        float target_time = s->time + wait_time;
+        if (target_time <= s->interval.end + 1e-4f) {
+            auto wait_very_long = make_shared<State>();
+            wait_very_long->r = s->r;
+            wait_very_long->c = s->c;
+            wait_very_long->time = target_time;
+            wait_very_long->g = target_time;
+            // Çok uzun bekleme için daha düşük bonus
+            float base_h = std::abs(s->r - gr) + std::abs(s->c - gc);
+            float obstacle_avoidance_bonus = -0.1f;
+            if (gm.safe[s->r][s->c].size() > 1) {
+                obstacle_avoidance_bonus -= 0.1f;
+            }
+            wait_very_long->h = base_h + obstacle_avoidance_bonus;
+            wait_very_long->interval = s->interval;
+            wait_very_long->parent = s;
+            successors.push_back(wait_very_long);
         }
     }
 
@@ -680,6 +702,46 @@ void getSuccessors(const shared_ptr<State>& s, GridMap& gm, vector<shared_ptr<St
                             wait_move->interval = succ_interval;
                             wait_move->parent = s;
                             successors.push_back(wait_move);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // YENİ: Daha uzun bekleme süreleri için (geniş koridorlarda)
+        for (float wait_time = 3.5f; wait_time <= 6.0f; wait_time += 0.5f) {
+            float target_wait_time = s->time + wait_time;
+            if (target_wait_time >= s->interval.end) break;
+            
+            // Bu uzun bekleme sonrası da hareket etmeyi dene
+            for (int k = 0; k < 4; k++) {
+                int nr = s->r + d4r[k];
+                int nc = s->c + d4c[k];
+                
+                if (nr < 0 || nr >= gm.rows || nc < 0 || nc >= gm.cols || gm.isWall(nr, nc)) continue;
+                
+                for (auto& succ_interval : gm.safe[nr][nc]) {
+                    float arrival_time = target_wait_time + moveCost;
+                    
+                    if (arrival_time >= succ_interval.start && arrival_time <= succ_interval.end) {
+                        if (!gm.isEdgeBlockedRange(s->r, s->c, nr, nc, target_wait_time, arrival_time)) {
+                            auto wait_move_long = make_shared<State>();
+                            wait_move_long->r = nr;
+                            wait_move_long->c = nc;
+                            wait_move_long->time = arrival_time;
+                            wait_move_long->g = arrival_time;
+                            
+                            // Uzun bekleme için daha düşük bonus (daha az tercih edilir)
+                            float base_h = std::abs(nr - gr) + std::abs(nr - gc);
+                            float obstacle_avoidance_bonus = -0.3f;
+                            if (gm.safe[nr][nc].size() > 1) {
+                                obstacle_avoidance_bonus -= 0.2f;
+                            }
+                            wait_move_long->h = base_h + obstacle_avoidance_bonus;
+                            
+                            wait_move_long->interval = succ_interval;
+                            wait_move_long->parent = s;
+                            successors.push_back(wait_move_long);
                         }
                     }
                 }
@@ -871,6 +933,203 @@ SIPP_Result runSIPP(GridMap& gm, int sr, int sc, int gr, int gc, float cellSize,
                 } else {
                     cout << "  Step " << i << ": Yön değişimi - "
                          << "(" << prev_c << "," << prev_r << ") -> (" << curr_c << "," << curr_r << ") -> (" << next_c << "," << next_r << ")" << endl;
+                }
+                
+                // Bekleme analizi
+                float time_diff = result.path[i].second - result.path[i-1].second;
+                if (time_diff > 1.1f) {
+                    cout << "    ⏰ Bekleme süresi: " << time_diff << " saniye" << endl;
+                }
+                
+                // Koridor genişliği analizi
+                if (i > 0 && i < result.path.size() - 1) {
+                    // Sol ve sağ komşuları kontrol et
+                    int left_r = curr_r, left_c = curr_c - 1;
+                    int right_r = curr_r, right_c = curr_c + 1;
+                    int up_r = curr_r - 1, up_c = curr_c;
+                    int down_r = curr_r + 1, down_c = curr_c;
+                    
+                    int free_directions = 0;
+                    if (left_c >= 0 && !gm.isWall(left_r, left_c)) free_directions++;
+                    if (right_c < gm.cols && !gm.isWall(right_r, right_c)) free_directions++;
+                    if (up_r >= 0 && !gm.isWall(up_r, up_c)) free_directions++;
+                    if (down_r < gm.rows && !gm.isWall(down_r, down_c)) free_directions++;
+                    
+                    cout << "    🚪 Koridor genişliği: " << free_directions << " yön açık" << endl;
+                    
+                    // Safe interval analizi
+                    if (curr_r >= 0 && curr_r < gm.rows && curr_c >= 0 && curr_c < gm.cols) {
+                        cout << "    🔒 Safe intervals: " << gm.safe[curr_r][curr_c].size() << " adet" << endl;
+                        
+                        // İlk birkaç safe interval'ı göster
+                        if (!gm.safe[curr_r][curr_c].empty()) {
+                            cout << "      ";
+                            for (size_t si = 0; si < min(size_t(3), gm.safe[curr_r][curr_c].size()); si++) {
+                                const auto& interval = gm.safe[curr_r][curr_c][si];
+                                cout << "[" << interval.start << "," << interval.end << "] ";
+                            }
+                            if (gm.safe[curr_r][curr_c].size() > 3) {
+                                cout << "...";
+                            }
+                            cout << endl;
+                        }
+                        
+                        // Edge blocking analizi
+                        int blocked_edges = 0;
+                        for (int k = 0; k < 4; k++) {
+                            int nr = curr_r + d4r[k];
+                            int nc = curr_c + d4c[k];
+                            if (nr >= 0 && nr < gm.rows && nc >= 0 && nc < gm.cols && !gm.isWall(nr, nc)) {
+                                auto key = make_tuple(curr_r, curr_c, nr, nc);
+                                if (gm.edge_block.find(key) != gm.edge_block.end()) {
+                                    blocked_edges++;
+                                }
+                            }
+                        }
+                                                cout << "    🚫 Bloke kenarlar: " << blocked_edges << " adet" << endl;
+                    }
+                }
+            }
+            
+            // Genel path analizi
+            cout << "📊 Genel Path Analizi:" << endl;
+            cout << "  🎯 Toplam adım: " << result.path.size() << endl;
+            cout << "  ⏱️  Toplam süre: " << result.path.back().second - result.path[0].second << " saniye" << endl;
+            
+            // Bekleme analizi
+            int wait_steps = 0;
+            float total_wait_time = 0.0f;
+            for (size_t i = 1; i < result.path.size(); i++) {
+                float time_diff = result.path[i].second - result.path[i-1].second;
+                if (time_diff > 1.1f) {
+                    wait_steps++;
+                    total_wait_time += time_diff - 1.0f; // 1 saniye hareket süresini çıkar
+                }
+            }
+            cout << "  ⏰ Bekleme adımları: " << wait_steps << " adet" << endl;
+            cout << "  ⏰ Toplam bekleme süresi: " << total_wait_time << " saniye" << endl;
+            
+            // Koridor tipi analizi
+            cout << "  🏗️  Koridor Tipi Analizi:" << endl;
+            bool has_horizontal = false, has_vertical = false, has_diagonal = false;
+            for (size_t i = 1; i < result.path.size() - 1; i++) {
+                sf::Vector2f prev = result.path[i-1].first;
+                sf::Vector2f curr = result.path[i].first;
+                sf::Vector2f next = result.path[i+1].first;
+                
+                int prev_r = static_cast<int>(prev.y / cellSize);
+                int prev_c = static_cast<int>(prev.x / cellSize);
+                int curr_r = static_cast<int>(curr.y / cellSize);
+                int curr_c = static_cast<int>(curr.x / cellSize);
+                int next_r = static_cast<int>(next.y / cellSize);
+                int next_c = static_cast<int>(next.x / cellSize);
+                
+                if (prev_r == curr_r && curr_r == next_r) has_horizontal = true;
+                if (prev_c == curr_c && curr_c == next_c) has_vertical = true;
+                if (abs(prev_r - next_r) == 1 && abs(prev_c - next_c) == 1) has_diagonal = true;
+            }
+            
+            if (has_horizontal) cout << "    ➡️  Yatay koridor kullanıldı" << endl;
+            if (has_vertical) cout << "    ⬇️  Dikey koridor kullanıldı" << endl;
+            if (has_diagonal) cout << "    ↘️  Çapraz hareket kullanıldı" << endl;
+            
+            // Dinamik engel kaçınma analizi
+            cout << "  🚧 Dinamik Engel Kaçınma:" << endl;
+            int total_waits = 0;
+            for (size_t i = 1; i < result.path.size(); i++) {
+                float time_diff = result.path[i].second - result.path[i-1].second;
+                if (time_diff > 1.1f) {
+                    total_waits++;
+                    cout << "    ⏰ Adım " << i << ": " << time_diff - 1.0f << " saniye bekleme" << endl;
+                }
+            }
+            if (total_waits == 0) {
+                cout << "    ✅ Hiç bekleme yapılmadı - direkt yol" << endl;
+            } else {
+                cout << "    🎯 Toplam " << total_waits << " kez bekleme yapıldı" << endl;
+            }
+            
+            // Performans analizi
+            cout << "  📈 Performans Analizi:" << endl;
+            float efficiency = (result.path.size() - 1) / (result.path.back().second - result.path[0].second);
+            cout << "    🎯 Hareket verimliliği: " << fixed << setprecision(2) << efficiency << " adım/saniye" << endl;
+            
+            if (efficiency < 0.8f) {
+                cout << "    ⚠️  Düşük verimlilik - çok fazla bekleme var" << endl;
+            } else if (efficiency < 1.0f) {
+                cout << "    ⚠️  Orta verimlilik - bazı bekleme var" << endl;
+            } else {
+                cout << "    ✅ Yüksek verimlilik - minimal bekleme" << endl;
+            }
+            
+            // Sonuç özeti
+            cout << "  🎉 SONUÇ ÖZETİ:" << endl;
+            cout << "    🎯 Path bulundu: " << (result.path.size() > 0 ? "✅ EVET" : "❌ HAYIR") << endl;
+            cout << "    ⏱️  Toplam süre: " << fixed << setprecision(2) << (result.path.back().second - result.path[0].second) << " saniye" << endl;
+            cout << "    🚶 Toplam adım: " << result.path.size() << endl;
+            cout << "    ⏰ Bekleme sayısı: " << total_waits << endl;
+            cout << "    📊 Verimlilik: " << fixed << setprecision(2) << efficiency << " adım/saniye" << endl;
+        }
+        }
+    }
+    
+    // Path bulunamadığında da detaylı analiz
+    else {
+        cout << "❌ YOL BULUNAMADI - Detaylı Analiz:" << endl;
+        cout << "  🎯 Başlangıç: (" << sr << "," << sc << ") -> Hedef: (" << gr << "," << gc << ")" << endl;
+        cout << "  🔒 Başlangıç safe intervals: " << gm.safe[sr][sc].size() << " adet" << endl;
+        cout << "  🔒 Hedef safe intervals: " << gm.safe[gr][gc].size() << " adet" << endl;
+        
+        // Safe interval detaylarını göster
+        if (!gm.safe[sr][sc].empty()) {
+            cout << "  📋 Başlangıç safe intervals:" << endl;
+            for (size_t i = 0; i < min(size_t(5), gm.safe[sr][sc].size()); i++) {
+                const auto& si = gm.safe[sr][sc][i];
+                cout << "    SI" << i << ": [" << si.start << ", " << si.end << "]" << endl;
+            }
+            if (gm.safe[sr][sc].size() > 5) {
+                cout << "    ... ve " << (gm.safe[sr][sc].size() - 5) << " tane daha" << endl;
+            }
+        }
+        if (!gm.safe[gr][gc].empty()) {
+            cout << "  📋 Hedef safe intervals:" << endl;
+            for (size_t i = 0; i < min(size_t(5), gm.safe[gr][gc].size()); i++) {
+                const auto& si = gm.safe[gr][gc][i];
+                cout << "    SI" << i << ": [" << si.start << ", " << si.end << "]" << endl;
+            }
+            if (gm.safe[gr][gc].size() > 5) {
+                cout << "    ... ve " << (gm.safe[gr][gc].size() - 5) << " tane daha" << endl;
+            }
+        }
+        
+        // Komşu hücrelerin safe interval sayılarını da göster
+        cout << "  🚪 Komşu hücrelerin safe interval sayıları:" << endl;
+        for (int k = 0; k < 4; k++) {
+            int nr = sr + d4r[k];
+            int nc = sc + d4c[k];
+            if (nr >= 0 && nr < gm.rows && nc >= 0 && nc < gm.cols && !gm.isWall(nr, nc)) {
+                cout << "    (" << nr << "," << nc << "): " << gm.safe[nr][nc].size() << " intervals" << endl;
+            }
+        }
+        
+        // Edge blocking bilgilerini de göster
+        cout << "  🚫 Edge blocking analizi:" << endl;
+        for (int k = 0; k < 4; k++) {
+            int nr = sr + d4r[k];
+            int nc = sc + d4c[k];
+            if (nr >= 0 && nr < gm.rows && nc >= 0 && nc < gm.cols && !gm.isWall(nr, nc)) {
+                auto key = make_tuple(sr, sc, nr, nc);
+                auto it = gm.edge_block.find(key);
+                if (it != gm.edge_block.end()) {
+                    cout << "    Edge (" << sr << "," << sc << ") -> (" << nr << "," << nc << "): " << it->second.size() << " blocked intervals" << endl;
+                    // Blocked interval detaylarını da göster
+                    for (size_t i = 0; i < min(size_t(3), it->second.size()); i++) {
+                        const auto& blocked = it->second[i];
+                        cout << "      Blocked " << i << ": [" << blocked.start << ", " << blocked.end << "]" << endl;
+                    }
+                    if (it->second.size() > 3) {
+                        cout << "      ... ve " << (it->second.size() - 3) << " tane daha" << endl;
+                    }
                 }
             }
         }
