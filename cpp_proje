@@ -1,290 +1,322 @@
-    #include <SFML/Graphics.hpp>
-    #include <iostream>
-    #include <fstream>
-    #include <vector>
-    #include <queue>
-    #include <cmath>
-    #include <algorithm>
-    #include <memory>
-    #include <sstream>
-    #include <iomanip>
-    #include <set>
-    #include <tuple>
-    using namespace std;
+#include <SFML/Graphics.hpp>
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <queue>
+#include <cmath>
+#include <algorithm>
+#include <memory>
+#include <sstream>
+#include <iomanip>
+#include <set>
+#include <tuple>
+#include <map>
+using namespace std;
 
-    enum CellType { EMPTY, WALL, START, GOAL };
+enum CellType { EMPTY, WALL, START, GOAL };
 
 
-    // --- Button Class ---
-    class Button {
-    public:
-        sf::RectangleShape rect;
-        sf::Text text;
-        bool hovered = false;
+// --- Button Class ---
+class Button {
+public:
+    sf::RectangleShape rect;
+    sf::Text text;
+    bool hovered = false;
 
-        Button(float x, float y, float w, float h, sf::Font& font, const string& str) {
-            rect.setPosition(x, y);
-            rect.setSize({ w, h });
-            rect.setFillColor(sf::Color(70, 70, 70));
-            rect.setOutlineThickness(1);
-            rect.setOutlineColor(sf::Color::White);
+    Button(float x, float y, float w, float h, sf::Font& font, const string& str) {
+        rect.setPosition(x, y);
+        rect.setSize({ w, h });
+        rect.setFillColor(sf::Color(70, 70, 70));
+        rect.setOutlineThickness(1);
+        rect.setOutlineColor(sf::Color::White);
 
-            text.setFont(font);
-            text.setString(str);
-            text.setCharacterSize(20);
+        text.setFont(font);
+        text.setString(str);
+        text.setCharacterSize(20);
+        text.setFillColor(sf::Color::White);
+        text.setPosition(x + w / 2 - text.getLocalBounds().width / 2, y + h / 2 - text.getLocalBounds().height / 2);
+    }
+
+    void update(const sf::Vector2f& mousePos) {
+        hovered = rect.getGlobalBounds().contains(mousePos);
+        rect.setFillColor(hovered ? sf::Color(100, 100, 100) : sf::Color(70, 70, 70));
+    }
+
+    bool isClicked(const sf::Vector2f& mousePos, const sf::Event& event) {
+        return hovered && event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left;
+    }
+
+    void draw(sf::RenderWindow& window) {
+        window.draw(rect);
+        window.draw(text);
+    }
+};
+
+// --- SelectBox Class ---
+class SelectBox {
+public:
+    vector<string> options;
+    sf::RectangleShape rect;
+    vector<sf::Text> texts;
+    int selected = 0;
+    bool expanded = false;
+    sf::Font& font;
+
+    SelectBox(float x, float y, float w, float h, sf::Font& f, const vector<string>& opts) : font(f), options(opts) {
+        rect.setPosition(x, y);
+        rect.setSize({ w, h });
+        rect.setFillColor(sf::Color(70, 70, 70));
+        rect.setOutlineThickness(1);
+        rect.setOutlineColor(sf::Color::White);
+
+        for (size_t i = 0; i < options.size(); ++i) {
+            sf::Text text(options[i], font, 20);
+            text.setPosition(x + 10, y + h + i * h);
             text.setFillColor(sf::Color::White);
-            text.setPosition(x + w / 2 - text.getLocalBounds().width / 2, y + h / 2 - text.getLocalBounds().height / 2);
+            texts.push_back(text);
         }
+    }
 
-        void update(const sf::Vector2f& mousePos) {
-            hovered = rect.getGlobalBounds().contains(mousePos);
-            rect.setFillColor(hovered ? sf::Color(100, 100, 100) : sf::Color(70, 70, 70));
-        }
-
-        bool isClicked(const sf::Vector2f& mousePos, const sf::Event& event) {
-            return hovered && event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left;
-        }
-
-        void draw(sf::RenderWindow& window) {
-            window.draw(rect);
-            window.draw(text);
-        }
-    };
-
-    // --- SelectBox Class ---
-    class SelectBox {
-    public:
-        vector<string> options;
-        sf::RectangleShape rect;
-        vector<sf::Text> texts;
-        int selected = 0;
-        bool expanded = false;
-        sf::Font& font;
-
-        SelectBox(float x, float y, float w, float h, sf::Font& f, const vector<string>& opts) : font(f), options(opts) {
-            rect.setPosition(x, y);
-            rect.setSize({ w, h });
-            rect.setFillColor(sf::Color(70, 70, 70));
-            rect.setOutlineThickness(1);
-            rect.setOutlineColor(sf::Color::White);
-
-            for (size_t i = 0; i < options.size(); ++i) {
-                sf::Text text(options[i], font, 20);
-                text.setPosition(x + 10, y + h + i * h);
-                text.setFillColor(sf::Color::White);
-                texts.push_back(text);
+    void update(const sf::Vector2f& mousePos, const sf::Event& event) {
+        if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
+            if (rect.getGlobalBounds().contains(mousePos)) {
+                expanded = !expanded;
             }
-        }
-
-        void update(const sf::Vector2f& mousePos, const sf::Event& event) {
-            if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
-                if (rect.getGlobalBounds().contains(mousePos)) {
-                    expanded = !expanded;
-                }
-                else if (expanded) {
-                    for (size_t i = 0; i < texts.size(); ++i) {
-                        if (texts[i].getGlobalBounds().contains(mousePos)) {
-                            selected = i;
-                            expanded = false;
-                            break;
-                        }
+            else if (expanded) {
+                for (size_t i = 0; i < texts.size(); ++i) {
+                    if (texts[i].getGlobalBounds().contains(mousePos)) {
+                        selected = i;
+                        expanded = false;
+                        break;
                     }
                 }
             }
         }
+    }
 
-        string getSelected() const {
-            return options[selected];
-        }
+    string getSelected() const {
+        return options[selected];
+    }
 
-        void draw(sf::RenderWindow& window) {
-            // Draw main box
-            window.draw(rect);
+    void draw(sf::RenderWindow& window) {
+        // Draw main box
+        window.draw(rect);
 
-            // Draw current selection
-            sf::Text current(options[selected], font, 20);
-            current.setPosition(rect.getPosition().x + 10, rect.getPosition().y + 5);
-            window.draw(current);
+        // Draw current selection
+        sf::Text current(options[selected], font, 20);
+        current.setPosition(rect.getPosition().x + 10, rect.getPosition().y + 5);
+        window.draw(current);
 
-            // Draw dropdown if expanded
-            if (expanded) {
-                for (size_t i = 0; i < texts.size(); ++i) {
-                    sf::RectangleShape optionRect(rect.getSize());
-                    optionRect.setPosition(rect.getPosition().x, rect.getPosition().y + rect.getSize().y + i * rect.getSize().y);
-                    optionRect.setFillColor(i == selected ? sf::Color(90, 90, 90) : sf::Color(70, 70, 70));
-                    window.draw(optionRect);
-                    window.draw(texts[i]);
-                }
+        // Draw dropdown if expanded
+        if (expanded) {
+            for (size_t i = 0; i < texts.size(); ++i) {
+                sf::RectangleShape optionRect(rect.getSize());
+                optionRect.setPosition(rect.getPosition().x, rect.getPosition().y + rect.getSize().y + i * rect.getSize().y);
+                optionRect.setFillColor(i == selected ? sf::Color(90, 90, 90) : sf::Color(70, 70, 70));
+                window.draw(optionRect);
+                window.draw(texts[i]);
             }
         }
-    };
+    }
+};
 
-    // --- CELL ---
-    struct Cell {
-        sf::RectangleShape shape;
-        CellType type;
-        int row, col;
+// --- CELL ---
+struct Cell {
+    sf::RectangleShape shape;
+    CellType type;
+    int row, col;
 
-        Cell(float x = 0, float y = 0, float s = 0, int r = 0, int c = 0) {
-            shape.setPosition(x, y);
-            shape.setSize({ s - 1, s - 1 });
-            shape.setFillColor(sf::Color(220, 220, 220));
-            shape.setOutlineThickness(1);
-            shape.setOutlineColor(sf::Color(200, 200, 200));
-            type = EMPTY;
-            row = r;
-            col = c;
+    Cell(float x = 0, float y = 0, float s = 0, int r = 0, int c = 0) {
+        shape.setPosition(x, y);
+        shape.setSize({ s - 1, s - 1 });
+        shape.setFillColor(sf::Color(220, 220, 220));
+        shape.setOutlineThickness(1);
+        shape.setOutlineColor(sf::Color(200, 200, 200));
+        type = EMPTY;
+        row = r;
+        col = c;
+    }
+
+    void setType(CellType t) {
+        type = t;
+        switch (t) {
+        case EMPTY: shape.setFillColor({ 220, 220, 220 }); break;
+        case WALL:  shape.setFillColor(sf::Color::Black); break;
+        case START: shape.setFillColor(sf::Color::Red); break;
+        case GOAL:  shape.setFillColor(sf::Color::Green); break;
+        }
+    }
+
+    void draw(sf::RenderWindow& w) { w.draw(shape); }
+};
+
+// --- GRID for UI ---
+struct Grid {
+    int rows, cols;
+    float size;
+    vector<vector<Cell>> cells;
+
+    Grid(int r, int c, float s) : rows(r), cols(c), size(s) {
+        cells.resize(r, vector<Cell>(c));
+        for (int i = 0; i < r; i++) {
+            for (int j = 0; j < c; j++) {
+                cells[i][j] = Cell(j * s, i * s, s, i, j);
+            }
+        }
+    }
+
+    void draw(sf::RenderWindow& w) {
+        for (auto& row : cells) {
+            for (auto& cell : row) {
+                cell.draw(w);
+            }
+        }
+    }
+
+    bool isWall(int r, int c) const {
+        return r < 0 || r >= rows || c < 0 || c >= cols || cells[r][c].type == WALL;
+    }
+
+    void toggleWall(int r, int c) {
+        if (r >= 0 && r < rows && c >= 0 && c < cols) {
+            cells[r][c].setType(cells[r][c].type == WALL ? EMPTY : WALL);
+        }
+    }
+
+    void save(const string& filename) {
+        ofstream out(filename);
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                out << cells[i][j].type << " ";
+            }
+            out << "\n";
+        }
+        cout << "Grid saved to " << filename << endl;
+    }
+
+    void load(const string& filename) {
+        ifstream in(filename);
+        if (!in) {
+            cout << "Failed to load file: " << filename << endl;
+            return;
         }
 
-        void setType(CellType t) {
-            type = t;
-            switch (t) {
-            case EMPTY: shape.setFillColor({ 220, 220, 220 }); break;
-            case WALL:  shape.setFillColor(sf::Color::Black); break;
-            case START: shape.setFillColor(sf::Color::Red); break;
-            case GOAL:  shape.setFillColor(sf::Color::Green); break;
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                int t;
+                in >> t;
+                cells[i][j].setType(static_cast<CellType>(t));
+            }
+        }
+        cout << "Grid loaded from " << filename << endl;
+    }
+};
+struct Interval {
+    float start, end;
+    Interval(float s = 0, float e = 1e9) : start(s), end(e) {}
+
+    bool contains(float t) const {
+        return t >= start && t <= end;
+    }
+};
+
+struct State {
+    int r, c;
+    float time;
+    Interval interval;
+    float g, h;
+    shared_ptr<State> parent;
+
+    float f() const { return g + h; }
+
+    bool operator>(const State& other) const {
+        return f() > other.f();
+    }
+};
+
+struct GridMap {
+    int rows, cols;
+    vector<vector<CellType>> cells;
+    vector<vector<vector<Interval>>> safe;
+    // Engellerin kenar boyunca geçiş yaptığı zaman aralıklarını bloklamak için
+    map<tuple<int, int, int, int>, vector<Interval>> edge_block;
+
+    GridMap(int r, int c) : rows(r), cols(c) {
+        cells.assign(r, vector<CellType>(c, EMPTY));
+        safe.assign(r, vector<vector<Interval>>(c));
+    }
+
+    bool isWall(int r, int c) const {
+        return r < 0 || r >= rows || c < 0 || c >= cols || cells[r][c] == WALL;
+    }
+
+    void addSafe(int r, int c, float s, float e) {
+        safe[r][c].emplace_back(s, e);
+    }
+
+    void blockCell(int r, int c, float s, float e) {
+        vector<Interval> updated;
+
+        for (auto& ival : safe[r][c]) {
+            // Çakışma yoksa
+            if (e <= ival.start || s >= ival.end) {
+                updated.push_back(ival);
+                continue;
+            }
+
+            // Çakışma durumları
+            if (ival.start < s) {
+                updated.emplace_back(ival.start, s);
+            }
+            if (ival.end > e) {
+                updated.emplace_back(e, ival.end);
             }
         }
 
-        void draw(sf::RenderWindow& w) { w.draw(shape); }
-    };
+        safe[r][c] = updated;
+    }
 
-    // --- GRID for UI ---
-    struct Grid {
-        int rows, cols;
-        float size;
-        vector<vector<Cell>> cells;
+    void blockEdge(int r1, int c1, int r2, int c2, float s, float e) {
+        auto key = make_tuple(r1, c1, r2, c2);
+        edge_block[key].emplace_back(s, e);
+    }
 
-        Grid(int r, int c, float s) : rows(r), cols(c), size(s) {
-            cells.resize(r, vector<Cell>(c));
-            for (int i = 0; i < r; i++) {
-                for (int j = 0; j < c; j++) {
-                    cells[i][j] = Cell(j * s, i * s, s, i, j);
-                }
-            }
+    bool isEdgeBlocked(int r1, int c1, int r2, int c2, float t) const {
+        auto it = edge_block.find(make_tuple(r1, c1, r2, c2));
+        if (it == edge_block.end()) return false;
+        for (const auto& ival : it->second) {
+            if (t >= ival.start - 1e-4f && t <= ival.end + 1e-4f) return true;
         }
+        return false;
+    }
 
-        void draw(sf::RenderWindow& w) {
-            for (auto& row : cells) {
-                for (auto& cell : row) {
-                    cell.draw(w);
-                }
-            }
+    bool isEdgeBlockedRange(int r1, int c1, int r2, int c2, float s, float e)
+        const{
+        auto it = edge_block.find(make_tuple(r1, c1, r2, c2));
+        if (it == edge_block.end()) return false;
+        for (const auto& ival : it->second)
+        {
+            //Overlap if not (e < ival.start || s >ival.end
+            if (!(e < ival.start - 1e-4f || s>ival.end + 1e-4f))return true;
         }
+        return false;
+    
+    
+    }
+        
 
-        bool isWall(int r, int c) const {
-            return r < 0 || r >= rows || c < 0 || c >= cols || cells[r][c].type == WALL;
-        }
-
-        void toggleWall(int r, int c) {
-            if (r >= 0 && r < rows && c >= 0 && c < cols) {
-                cells[r][c].setType(cells[r][c].type == WALL ? EMPTY : WALL);
-            }
-        }
-
-        void save(const string& filename) {
-            ofstream out(filename);
-            for (int i = 0; i < rows; i++) {
-                for (int j = 0; j < cols; j++) {
-                    out << cells[i][j].type << " ";
-                }
-                out << "\n";
-            }
-            cout << "Grid saved to " << filename << endl;
-        }
-
-        void load(const string& filename) {
-            ifstream in(filename);
-            if (!in) {
-                cout << "Failed to load file: " << filename << endl;
-                return;
-            }
-
-            for (int i = 0; i < rows; i++) {
-                for (int j = 0; j < cols; j++) {
-                    int t;
-                    in >> t;
-                    cells[i][j].setType(static_cast<CellType>(t));
-                }
-            }
-            cout << "Grid loaded from " << filename << endl;
-        }
-    };
-    struct Interval {
-        float start, end;
-        Interval(float s = 0, float e = 1e9) : start(s), end(e) {}
-
-        bool contains(float t) const {
-            return t >= start && t <= end;
-        }
-    };
-
-    struct State {
-        int r, c;
-        float time;
-        Interval interval;
-        float g, h;
-        shared_ptr<State> parent;
-
-        float f() const { return g + h; }
-
-        bool operator>(const State& other) const {
-            return f() > other.f();
-        }
-    };
-
-    struct GridMap {
-        int rows, cols;
-        vector<vector<CellType>> cells;
-        vector<vector<vector<Interval>>> safe;
-
-        GridMap(int r, int c) : rows(r), cols(c) {
-            cells.assign(r, vector<CellType>(c, EMPTY));
-            safe.assign(r, vector<vector<Interval>>(c));
-        }
-
-        bool isWall(int r, int c) const {
-            return r < 0 || r >= rows || c < 0 || c >= cols || cells[r][c] == WALL;
-        }
-
-        void addSafe(int r, int c, float s, float e) {
-            safe[r][c].emplace_back(s, e);
-        }
-
-        void blockCell(int r, int c, float s, float e) {
-            vector<Interval> updated;
-
-            for (auto& ival : safe[r][c]) {
-                // Çakışma yoksa
-                if (e <= ival.start || s >= ival.end) {
-                    updated.push_back(ival);
-                    continue;
-                }
-
-                // Çakışma durumları
-                if (ival.start < s) {
-                    updated.emplace_back(ival.start, s);
-                }
-                if (ival.end > e) {
-                    updated.emplace_back(e, ival.end);
-                }
-            }
-
-            safe[r][c] = updated;
-        }
-
-            void drawSafeIntervals(sf::RenderWindow& win, float cellSize) {
+    void drawSafeIntervals(sf::RenderWindow& win, float cellSize) {
         sf::Font font;
         if (!font.loadFromFile("arial.ttf")) return;
 
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
                 if (safe[r][c].empty()) continue;
-                
+
                 // Cell ID'sini yazdır
                 stringstream cellId;
                 cellId << "(" << r << "," << c << ")";
-                
+
                 sf::Text cellText;
                 cellText.setFont(font);
                 cellText.setString(cellId.str());
@@ -292,7 +324,7 @@
                 cellText.setFillColor(sf::Color::Red);
                 cellText.setPosition(c * cellSize + 2, r * cellSize + 2);
                 win.draw(cellText);
-                
+
                 // Safe interval'ları yazdır
                 for (size_t i = 0; i < safe[r][c].size(); i++) {
                     const auto& ival = safe[r][c][i];
@@ -313,332 +345,606 @@
             }
         }
     }
-    }; 
+};
 
-    struct DynamicObstacle {
-        sf::CircleShape shape;
-        int start_r, start_c;//Başlangıç Pozisyonunu sakla
-        int r, c, dr, dc;
-        float interval;
-        vector<pair<int, int>> path;
+struct DynamicObstacle {
+    sf::CircleShape shape;
+    int start_r, start_c;//Başlangıç Pozisyonunu sakla
+    int r, c, dr, dc;
+    float interval;
+    vector<pair<int, int>> path;
 
-        float cellSize; // Hücre boyutunu sakla
+    float cellSize; // Hücre boyutunu sakla
 
-            DynamicObstacle(int rr, int cc, bool horiz, float sz) :
-        start_r(rr), start_c(cc), r(rr), c(cc), dr(horiz ? 0 : 1), dc(horiz ? 1 : 0), interval(4.0f), cellSize(sz)
+    DynamicObstacle(int rr, int cc, bool horiz, float sz) :
+        start_r(rr), start_c(cc), r(rr), c(cc), dr(horiz ? 0 : 1), dc(horiz ? 1 : 0), interval(1.0f), cellSize(sz)
+    {
+        shape.setRadius(sz / 3);
+        shape.setOrigin(shape.getRadius(), shape.getRadius());
+        shape.setPosition(c * sz + sz / 2, r * sz + sz / 2);
+        shape.setFillColor(sf::Color(150, 150, 150));
+    }
+
+    void computePath(Grid& grid) {
+        path.clear();
+
+        if (grid.isWall(start_r, start_c))return;
+
+        int cur_r = start_r;
+        int cur_c = start_c;
+        int cur_dr = dr, cur_dc = dc;
+
+        for (int i = 0; i < grid.rows * grid.cols * 2; i++)
         {
-            shape.setRadius(sz / 3);
-            shape.setOrigin(shape.getRadius(), shape.getRadius());
-            shape.setPosition(c * sz + sz / 2, r * sz + sz / 2);
-            shape.setFillColor(sf::Color(150, 150, 150));
-        }
+            path.emplace_back(cur_r, cur_c);
 
-        void computePath(Grid& grid) {
-            path.clear();
+            int next_r = cur_r + cur_dr;
+            int next_c = cur_c + cur_dc;
 
-            if (grid.isWall(start_r, start_c))return;
-
-            int cur_r = start_r;
-            int cur_c = start_c;
-            int cur_dr = dr, cur_dc = dc;
-
-            for(int i = 0;i<grid.rows*grid.cols*2;i++)
+            if (grid.isWall(next_r, next_c))
             {
-                path.emplace_back(cur_r, cur_c);
+                cur_dr = -cur_dr;
+                cur_dc = -cur_dc;
+                next_r = cur_r + cur_dr;
+                next_c = cur_c + cur_dc;
+                //Duvara çarpttıktan sonra hala köşeye sıkıştıysa
 
-                int next_r = cur_r + cur_dr;
-                int next_c = cur_c + cur_dc;
-
-                if(grid.isWall(next_r,next_c))
+                if (grid.isWall(next_r, next_c))
                 {
-                    cur_dr = -cur_dr;
-                    cur_dc = -cur_dc;
-                    next_r = cur_r + cur_dr;
-                    next_c = cur_c + cur_dc;
-                    //Duvara çarpttıktan sonra hala köşeye sıkıştıysa
-
-                    if(grid.isWall(next_r,next_c))
-                    {
-                        path.emplace_back(cur_r, cur_c);//Olduğu yerde bekleme adımı
-                        continue;
-                    }
-                }
-
-                cur_r = next_r;
-                cur_c = next_c;
-
-                //Başlangıç noktasına ve yönüne geri döndüyse döngü 
-                if (cur_r == start_r && cur_c == start_c && cur_dr == dr && cur_dc == dc)
-                {
-                    break;
+                    path.emplace_back(cur_r, cur_c);//Olduğu yerde bekleme adımı
+                    continue;
                 }
             }
-        }
 
-        void update(float simTime) {
-            
-            
-            if (path.empty()) return;
+            cur_r = next_r;
+            cur_c = next_c;
 
-            
-            //fmod yolun periyodik olmasını sağlar
-            float cycleTime = fmod(simTime, path.size() * interval);
-            int step = static_cast<int>(cycleTime / interval);
-
-            if (step < path.size()) {
-                r = path[step].first;
-                c = path[step].second;
-                //Pozisyonu doğru şekilde güncelle
-                shape.setPosition(c * cellSize + cellSize / 2, r * cellSize + cellSize / 2);
-            }
-        }
-
-        //Hem engeli hem de yolunu çizen fonksiyon 
-        void draw(sf::RenderWindow& w,bool isSimulating) 
-        {
-            //Editor modundaysak engelin gideceği yolu çiz
-            if(!isSimulating && path.size()>1)
+            //Başlangıç noktasına ve yönüne geri döndüyse döngü 
+            if (cur_r == start_r && cur_c == start_c && cur_dr == dr && cur_dc == dc)
             {
-                for(size_t i = 0;i<path.size();i++)
-                {
-                    sf::Vector2f p1(path[i].second * cellSize + cellSize / 2, path[i].first * cellSize + cellSize / 2);
-                    sf::Vector2f p2(path[(i + 1) % path.size()].second * cellSize + cellSize / 2, path[(i + 1) % path.size()].first * cellSize + cellSize / 2);
-                    sf::Vertex line[] = { sf::Vertex(p1,sf::Color(255,165,0,70)),sf::Vertex(p2,sf::Color(255,165,0,70)) };
-                    w.draw(line, 2, sf::Lines);
-                }
-
-            }
-            w.draw(shape);
-        }
-    };
-
-    void computeSafeIntervals(GridMap& gm, const vector<DynamicObstacle>& obs) {
-    // Tüm hücreleri tam erişilebilirlikle başlat
-    for (int i = 0; i < gm.rows; i++) {
-        for (int j = 0; j < gm.cols; j++) {
-            gm.safe[i][j].clear();
-            if (!gm.isWall(i, j)) {
-                gm.addSafe(i, j, 0, 1e9);
+                break;
             }
         }
     }
 
-    const float PLANNING_HORIZON = 40.0f; // Planlama ufku
-    const float SAFETY_MARGIN = 0.8f; // Güvenlik marjı - engellerle çarpışmayı önlemek için
-    
-    // Her engel için güvenli aralıkları engelle
-    for (const auto& o : obs) 
+    void update(float simTime) {
+
+
+        if (path.empty()) return;
+
+
+        //fmod yolun periyodik olmasını sağlar
+        float cycleTime = fmod(simTime, path.size() * interval);
+        int step = static_cast<int>(cycleTime / interval);
+
+        if (step < path.size()) {
+            r = path[step].first;
+            c = path[step].second;
+            //Pozisyonu doğru şekilde güncelle
+            shape.setPosition(c * cellSize + cellSize / 2, r * cellSize + cellSize / 2);
+        }
+    }
+
+    //Hem engeli hem de yolunu çizen fonksiyon 
+    void draw(sf::RenderWindow& w, bool isSimulating)
     {
-        if (o.path.empty()) continue;
-        
-        float cycle_duration = o.path.size() * o.interval;
-        if (cycle_duration <= 0) continue;
-        
-        float current_time = 0.0f;
-        while(current_time < PLANNING_HORIZON)
+        //Editor modundaysak engelin gideceği yolu çiz
+        if (!isSimulating && path.size() > 1)
         {
-            // Engelin bir döngüsündeki her adımı işle
-            for(size_t i = 0; i < o.path.size(); i++)
+            for (size_t i = 0; i < path.size(); i++)
             {
+                sf::Vector2f p1(path[i].second * cellSize + cellSize / 2, path[i].first * cellSize + cellSize / 2);
+                sf::Vector2f p2(path[(i + 1) % path.size()].second * cellSize + cellSize / 2, path[(i + 1) % path.size()].first * cellSize + cellSize / 2);
+                sf::Vertex line[] = { sf::Vertex(p1,sf::Color(255,165,0,70)),sf::Vertex(p2,sf::Color(255,165,0,70)) };
+                w.draw(line, 2, sf::Lines);
+            }
+
+        }
+        w.draw(shape);
+    }
+};
+
+void computeSafeIntervals(GridMap& gm, const vector<DynamicObstacle>& obs) {
+    // Başlangıçta tüm erişilebilir hücreler için tek bir büyük güvenli aralık ekle
+    for (int i = 0; i < gm.rows; i++) {
+        for (int j = 0; j < gm.cols; j++) {
+            gm.safe[i][j].clear();
+            if (!gm.isWall(i, j)) {
+                gm.addSafe(i, j, 0, 1e9f);
+            }
+        }
+    }
+
+    const float PLANNING_HORIZON = 120.0f;
+    const float SAFETY_MARGIN = 0.5f; // Daha hassas collision detection
+    const float EDGE_EPS = 0.1f; // Edge blocking için küçük tolerans
+
+    // Kenar bloklarını temizle
+    gm.edge_block.clear();
+
+    // Dinamik engellerin işgal ettiği hücre ve kenar zaman aralıklarını blokla
+    for (const auto& o : obs) {
+        if (o.path.empty()) continue;
+
+        float cycle_duration = static_cast<float>(o.path.size()) * o.interval;
+        if (cycle_duration <= 0) continue;
+
+        float current_time = 0.0f;
+        while (current_time < PLANNING_HORIZON) {
+            for (size_t i = 0; i < o.path.size(); i++) {
                 const auto& p = o.path[i];
-                float block_start = current_time + i * o.interval - SAFETY_MARGIN;
-                float block_end = current_time + (i + 1) * o.interval + SAFETY_MARGIN;
-
+                float block_start = current_time + static_cast<float>(i) * o.interval - SAFETY_MARGIN;
+                float block_end = current_time + static_cast<float>(i + 1) * o.interval + SAFETY_MARGIN;
                 if (block_start > PLANNING_HORIZON) break;
-
                 gm.blockCell(p.first, p.second, block_start, block_end);
+
+                
+                // Kenar bloklama: bir sonraki adıma geçiş süresince kenarı kapat
+                const auto& q = o.path[(i + 1) % o.path.size()];
+                // Eğer aynı hücre değilse kenar kapat (hareket var)
+                if (!(q.first == p.first && q.second == p.second)) {
+                    float e_start = current_time + static_cast<float>(i) * o.interval - EDGE_EPS;
+                    float e_end = current_time + static_cast<float>(i + 1) * o.interval + EDGE_EPS;
+                    // Kenarı her iki yönde de kapat
+                    gm.blockEdge(p.first, p.second, q.first, q.second, e_start, e_end);
+                    gm.blockEdge(q.first, q.second, p.first, p.second, e_start, e_end);
+                }
             }
             current_time += cycle_duration;
         }
     }
 }
 
-    const int d4r[4] = { 1, -1, 0, 0 }, d4c[4] = { 0, 0, 1, -1 };
+// 4-komşuluk yön vektörleri
+static const int d4r[4] = { 1, -1, 0, 0 };
+static const int d4c[4] = { 0, 0, 1, -1 };
 
+void getSuccessors(const shared_ptr<State>& s, GridMap& gm, vector<shared_ptr<State>>& successors, int gr, int gc) {
 
-    void getSuccessors(const shared_ptr<State>& s, GridMap& gm, vector<shared_ptr<State>>& successors, int gr, int gc) {
-        
-        successors.clear();
-        const float moveCost = 1.0f;
+    successors.clear();
+    const float moveCost = 1.0f;
 
-        // Hareket eylemleri
-        for (int k = 0; k < 4; k++) {
-            int nr = s->r + d4r[k];
-            int nc = s->c + d4c[k];
+    // Hareket eylemleri
+    for (int k = 0; k < 4; k++) {
+        int nr = s->r + d4r[k];
+        int nc = s->c + d4c[k];
 
-            if (nr < 0 || nr >= gm.rows || nc < 0 || nc >= gm.cols || gm.isWall(nr,nc)) continue;
+        if (nr < 0 || nr >= gm.rows || nc < 0 || nc >= gm.cols || gm.isWall(nr, nc)) continue;
 
-            // Komşu hücredeki tüm güvenli aralıkları kontrol et
-            for (auto& succ_interval : gm.safe[nr][nc]) 
-            {
-                // 1. Komşuya en erken ne zaman varabiliriz?
-                float earliest_arrival_at_neighbour = max(s->time + moveCost, succ_interval.start);
-                
-                // 2. Bu varış zamanı komşudaki güvenli aralığın sonundan önce mi?
-                if (earliest_arrival_at_neighbour > succ_interval.end) continue;
+        // Komşu hücredeki tüm güvenli aralıkları kontrol et
+        for (auto& succ_interval : gm.safe[nr][nc]) {
+            // 1) Komşuya en erken ne zaman varabiliriz?
+            float earliest_arrival_at_neighbour = max(s->time + moveCost, succ_interval.start);
 
-                // 3. Komşuya varmak için mevcut hücreden ne zaman ayrılmamız gerekir?
-                float required_departure_from_current = earliest_arrival_at_neighbour - moveCost;
+            // 2) Bu varış zamanı komşudaki güvenli aralığın sonundan önce mi?
+            if (earliest_arrival_at_neighbour > succ_interval.end) continue;
 
-                            // 4. Bu ayrılış zamanı şu an bulunduğumuz hücrenin güvenli aralığı içinde mi?
+            // 3) Komşuya varmak için mevcut hücreden ne zaman ayrılmamız gerekir?
+            float required_departure_from_current = earliest_arrival_at_neighbour - moveCost;
+
+            // 4) Ayrılış zamanı mevcut hücrenin güvenli aralığı içinde mi?
             if (required_departure_from_current > s->interval.end) continue;
-            
-            // 5. Ek güvenlik kontrolü - hareket sırasında collision var mı?
             if (required_departure_from_current < s->interval.start) continue;
 
-                            // Tüm kontrollerden geçtiyse bu geçerli bir adımdır.
+            // 5) Kenar swap/işgali kontrolü: ayrılış anında kenar bloke mi?
+            if (gm.isEdgeBlockedRange(s->r, s->c, nr, nc, required_departure_from_current,earliest_arrival_at_neighbour)) continue;
+            if (gm.isEdgeBlockedRange(nr, nc, s->r, s->c, required_departure_from_current,earliest_arrival_at_neighbour)) continue;
+
+            // Geçerli adım
             auto succ = make_shared<State>();
             succ->r = nr;
             succ->c = nc;
             succ->time = earliest_arrival_at_neighbour;
-            succ->g = s->g + moveCost; // Toplam maliyet = mevcut maliyet + hareket maliyeti
-            succ->h = std::abs(nr - gr) + std::abs(nc - gc);
+            succ->g = earliest_arrival_at_neighbour; // zaman tabanlı maliyet
+            // İyileştirilmiş heuristic: hem Manhattan hem de dinamik engel kaçınma
+            float base_h = std::abs(nr - gr) + std::abs(nc - gc);
+            
+            // Dinamik engellerden kaçınma bonusu - koridor geçişleri için
+            float obstacle_avoidance_bonus = 0.0f;
+            if (gm.safe[nr][nc].size() > 1) {
+                // Birden fazla safe interval varsa, bu hücrede daha esnek hareket imkanı var
+                obstacle_avoidance_bonus = -0.5f;
+            }
+            
+            succ->h = base_h + obstacle_avoidance_bonus;
             succ->interval = succ_interval;
             succ->parent = s;
 
             successors.push_back(succ);
+        }
+    }
+
+    // Wait: aynı aralıkta sonuna kadar bekle
+    if (s->time < s->interval.end) {
+        auto wait_same = make_shared<State>();
+        wait_same->r = s->r;
+        wait_same->c = s->c;
+        wait_same->time = s->interval.end;
+        wait_same->g = wait_same->time;
+                    // İyileştirilmiş heuristic: bekleme sırasında da engel kaçınma bonusu
+            float base_h = std::abs(s->r - gr) + std::abs(s->c - gc);
+            float obstacle_avoidance_bonus = 0.0f;
+            if (gm.safe[s->r][s->c].size() > 1) {
+                obstacle_avoidance_bonus = -0.3f; // Bekleme için daha az bonus
+            }
+            wait_same->h = base_h + obstacle_avoidance_bonus;
+        wait_same->interval = s->interval;
+        wait_same->parent = s;
+        successors.push_back(wait_same);
+    }
+
+    // Wait: aynı aralıkta sabit 1 saniye bekle (ince ayarlı saklanma/tempo)
+    {
+        float wait_step = 1.0f;
+        float target_time = s->time + wait_step;
+        if (target_time <= s->interval.end + 1e-4f) { // küçük tolerans
+            auto wait_fixed = make_shared<State>();
+            wait_fixed->r = s->r;
+            wait_fixed->c = s->c;
+            wait_fixed->time = std::min(target_time, s->interval.end);
+            if (wait_fixed->time > s->time + 1e-4f) { // gerçek bir bekleme olsun
+                wait_fixed->g = wait_fixed->time;
+                // İyileştirilmiş heuristic: sabit bekleme için
+            float base_h = std::abs(s->r - gr) + std::abs(s->c - gc);
+            float obstacle_avoidance_bonus = 0.0f;
+            if (gm.safe[s->r][s->c].size() > 1) {
+                obstacle_avoidance_bonus = -0.2f;
+            }
+            wait_fixed->h = base_h + obstacle_avoidance_bonus;
+                wait_fixed->interval = s->interval;
+                wait_fixed->parent = s;
+                successors.push_back(wait_fixed);
             }
         }
+    }
 
-        // WAIT ACTION - Mevcut hücrede bekleme eylemi
-        // Mevcut hücredeki diğer güvenli aralıkları kontrol et
-        for (auto& wait_interval : gm.safe[s->r][s->c]) 
-        {
-            // Eğer bu aralık mevcut aralıktan sonra başlıyorsa ve mevcut zamandan sonra başlıyorsa
-            if (wait_interval.start > s->time && wait_interval.start > s->interval.start) 
-            {
-                            auto wait_succ = make_shared<State>();
+    // YENİ: Daha esnek bekleme stratejileri - koridor geçişleri için
+    // 0.5, 1.5, 2.5 gibi farklı bekleme süreleri dene
+    for (float wait_multiplier = 0.5f; wait_multiplier <= 3.0f; wait_multiplier += 0.5f) {
+        float wait_step = wait_multiplier;
+        float target_time = s->time + wait_step;
+        if (target_time <= s->interval.end + 1e-4f) {
+            auto wait_flexible = make_shared<State>();
+            wait_flexible->r = s->r;
+            wait_flexible->c = s->c;
+            wait_flexible->time = target_time;
+            wait_flexible->g = target_time;
+            // İyileştirilmiş heuristic: esnek bekleme için
+            float base_h = std::abs(s->r - gr) + std::abs(s->c - gc);
+            float obstacle_avoidance_bonus = 0.0f;
+            if (gm.safe[s->r][s->c].size() > 1) {
+                obstacle_avoidance_bonus = -0.4f; // Esnek bekleme için daha fazla bonus
+            }
+            wait_flexible->h = base_h + obstacle_avoidance_bonus;
+            wait_flexible->interval = s->interval;
+            wait_flexible->parent = s;
+            successors.push_back(wait_flexible);
+        }
+    }
+
+    // Wait: bu hücredeki ileriki güvenli aralıkların başlangıçlarına kadar bekle
+    for (auto& wait_interval : gm.safe[s->r][s->c]) {
+        if (wait_interval.start >= s->time && wait_interval.start >= s->interval.start) {
+            auto wait_succ = make_shared<State>();
             wait_succ->r = s->r;
             wait_succ->c = s->c;
             wait_succ->time = wait_interval.start;
-            wait_succ->g = s->g + (wait_interval.start - s->time); // Toplam maliyet = mevcut maliyet + bekleme süresi
-            wait_succ->h = std::abs(s->r - gr) + std::abs(s->c - gc);
+            wait_succ->g = wait_interval.start;
+            // İyileştirilmiş heuristic: interval bekleme için
+            float base_h = std::abs(s->r - gr) + std::abs(s->c - gc);
+            float obstacle_avoidance_bonus = 0.0f;
+            if (gm.safe[s->r][s->c].size() > 1) {
+                obstacle_avoidance_bonus = -0.3f;
+            }
+            wait_succ->h = base_h + obstacle_avoidance_bonus;
             wait_succ->interval = wait_interval;
             wait_succ->parent = s;
-
-                successors.push_back(wait_succ);
-            }
+            successors.push_back(wait_succ);
         }
     }
-    struct SIPP_Result
-    {
-        vector<pair<sf::Vector2f, float>> path;
-        vector<pair<int, int>> open_list_nodes;
-        vector<pair<int, int>> closed_list_nodes;
-    };
 
-    SIPP_Result runSIPP(GridMap& gm, int sr, int sc, int gr, int gc, float cellSize) {
-        struct StateCompare {
-            bool operator()(const shared_ptr<State>& a, const shared_ptr<State>& b) const {
-                if(a->f() != b->f()) return a->f() > b->f();
-                return a->g > b->g; // F skorları eşitse g skoru daha düşük olanı önceliklendir
-            }
-        };
-
-        priority_queue<shared_ptr<State>, vector<shared_ptr<State>>, StateCompare> open_list;
-        set<tuple<int, int, float>> closed_list;
-
-        if (!gm.safe[sr][sc].empty()) 
-        {
-            auto start = make_shared<State>();
-            start->r = sr;
-            start->c = sc;
-            start->time = 0.0f;
-            start->g = 0.0f;
-            start->h = abs(sr - gr) + abs(sc - gc);
-            start->interval = gm.safe[sr][sc][0]; // İlk güvenli aralıkla başla
-            start->parent = nullptr;
-            open_list.push(start);
-            closed_list.insert({ sr, sc, start->interval.start });
+    // YENİ: "Wait and then move" stratejisi - koridor geçişleri için kritik
+    // Mevcut hücrede bekleyip sonra farklı yönlere hareket etme seçeneği
+    if (s->time < s->interval.end - 0.1f) { // Hala bekleme imkanı varsa
+        // Kısa bekleme sonrası hareket kombinasyonları
+        for (float wait_time = 0.2f; wait_time <= 2.0f; wait_time += 0.2f) {
+            float target_wait_time = s->time + wait_time;
+            if (target_wait_time >= s->interval.end) break;
             
-            cout << "SIPP başlatıldı: (" << sr << "," << sc << ") -> (" << gr << "," << gc << ")" << endl;
-        }
-        else
-        {
-            cout << "Başlangıç noktası güvenli değil!" << endl;
-            return {};
-        }
-
-        shared_ptr<State> goal_node = nullptr;
-        int iterations = 0;
-        const int MAX_ITERATIONS = 10000;
-
-        while (!open_list.empty() && iterations < MAX_ITERATIONS) {
-            auto current = open_list.top();
-            open_list.pop();
-            iterations++;
-
-            // Hedefe ulaştık mı?
-            if (current->r == gr && current->c == gc) {
-                goal_node = current;
-                cout << "Hedef bulundu! Iterasyon: " << iterations << endl;
-                break;
-            }
-
-            vector<shared_ptr<State>> successors;
-            getSuccessors(current, gm, successors, gr, gc);
-
-            for (auto& succ : successors) 
-            {
-                // Bu durumu (konum + aralık) daha önce ziyaret ettik mi?
-                auto key = make_tuple(succ->r, succ->c, succ->interval.start);
-
-                if (closed_list.find(key) == closed_list.end())  
-                {
-                    // Ziyaret etmediysek open_list ekle ve visited olarak işaretle
-                    open_list.push(succ);
-                    closed_list.insert(key);
+            // Bu bekleme sonrası tüm komşulara hareket etmeyi dene
+            for (int k = 0; k < 4; k++) {
+                int nr = s->r + d4r[k];
+                int nc = s->c + d4c[k];
+                
+                if (nr < 0 || nr >= gm.rows || nc < 0 || nc >= gm.cols || gm.isWall(nr, nc)) continue;
+                
+                // Komşudaki güvenli aralıkları kontrol et
+                for (auto& succ_interval : gm.safe[nr][nc]) {
+                    float arrival_time = target_wait_time + moveCost;
+                    
+                    if (arrival_time >= succ_interval.start && arrival_time <= succ_interval.end) {
+                        // Kenar blokajını kontrol et
+                        if (!gm.isEdgeBlockedRange(s->r, s->c, nr, nc, target_wait_time, arrival_time)) {
+                            auto wait_move = make_shared<State>();
+                            wait_move->r = nr;
+                            wait_move->c = nc;
+                            wait_move->time = arrival_time;
+                            wait_move->g = arrival_time;
+                            // İyileştirilmiş heuristic: wait and move için
+                            float base_h = std::abs(nr - gr) + std::abs(nc - gc);
+                            float obstacle_avoidance_bonus = 0.0f;
+                            if (gm.safe[nr][nc].size() > 1) {
+                                obstacle_avoidance_bonus = -0.6f; // Wait and move için en yüksek bonus
+                            }
+                            wait_move->h = base_h + obstacle_avoidance_bonus;
+                            wait_move->interval = succ_interval;
+                            wait_move->parent = s;
+                            successors.push_back(wait_move);
+                        }
+                    }
                 }
             }
         }
-        
-        if (iterations >= MAX_ITERATIONS) {
-            cout << "Maksimum iterasyon sayısına ulaşıldı!" << endl;
-        }
+    }
+}
 
-        SIPP_Result result;
+struct SIPP_Result
+{
+    vector<pair<sf::Vector2f, float>> path;
+    vector<pair<int, int>> open_list_nodes;
+    vector<pair<int, int>> closed_list_nodes;
+};
 
-        if (goal_node) {
-            auto p = goal_node;
-            while (p) {
-                result.path.emplace_back(
-                    sf::Vector2f(p->c * cellSize + cellSize / 2, p->r * cellSize + cellSize / 2),
-                    p->time
-                );
-                p = p->parent;
+SIPP_Result runSIPP(GridMap& gm, int sr, int sc, int gr, int gc, float cellSize, float startTime = 0.0f) {
+    struct StateCompare {
+        bool operator()(const shared_ptr<State>& a, const shared_ptr<State>& b) const {
+            if (a->f() != b->f()) return a->f() > b->f();
+            return a->g > b->g; // F skorları eşitse g skoru daha düşük olanı önceliklendir
+        }
+    };
+
+    priority_queue<shared_ptr<State>, vector<shared_ptr<State>>, StateCompare> open_list;
+    // (r,c,interval.start) -> best g (earliest arrival). Allow reopening when improved
+    map<tuple<int, int, float, int, int>, float> best_g;
+    SIPP_Result result;
+    if (!gm.safe[sr][sc].empty())
+    {
+        auto start = make_shared<State>();
+        start->r = sr;
+        start->c = sc;
+        // startTime'a uygun güvenli aralığı bul: önce içerene bak, yoksa start >= startTime olan ilk aralığı seç
+        const auto& si = gm.safe[sr][sc];
+        int chosen = -1;
+        for (size_t i = 0; i < si.size(); ++i) {
+            if (startTime >= si[i].start && startTime <= si[i].end) { chosen = static_cast<int>(i); break; }
+        }
+        if (chosen == -1) {
+            for (size_t i = 0; i < si.size(); ++i) {
+                if (si[i].start >= startTime) { chosen = static_cast<int>(i); break; }
             }
-            reverse(result.path.begin(), result.path.end());
-            
-            cout << "Path oluşturuldu, " << result.path.size() << " nokta" << endl;
-            for (size_t i = 0; i < result.path.size(); i++) {
-                cout << "  " << i << ": (" << result.path[i].first.x << "," << result.path[i].first.y << ") at " << result.path[i].second << endl;
-            }
         }
-        else
-        {
-            cout << "Yol bulunamadı! Başlangıç: (" << sr << "," << sc << ") Hedef: (" << gr << "," << gc << ")" << endl;
-            cout << "Başlangıç hücresinin safe interval sayısı: " << gm.safe[sr][sc].size() << endl;
-            cout << "Hedef hücresinin safe interval sayısı: " << gm.safe[gr][gc].size() << endl;
+        if (chosen == -1) {
+            cout << "SIPP start: No safe interval at or after t=" << startTime << " for cell (" << sr << "," << sc << ")" << endl;
+            return result; // başlatılamaz
         }
-        
-        // Closed listi doldur
-        for(const auto& item : closed_list)
-        {
-            result.closed_list_nodes.push_back({ get<0>(item), get<1>(item) });
+        start->interval = si[chosen];
+        // Başlangıç zamanı: aralık içinde ise startTime, değilse aralığın başlangıcı
+        start->time = std::max(startTime, start->interval.start);
+        start->g = start->time; // g = zaman maliyeti
+        // İyileştirilmiş heuristic: başlangıç durumu için
+        float base_h = abs(sr - gr) + abs(sc - gc);
+        float obstacle_avoidance_bonus = 0.0f;
+        if (gm.safe[sr][sc].size() > 1) {
+            obstacle_avoidance_bonus = -0.3f;
         }
-        
-        // Open listi doldur
-        while(!open_list.empty())
-        {
-            auto node = open_list.top();
-            open_list.pop();
-            result.open_list_nodes.push_back({ node->r, node->c });
-        }
-        
-        return result;
+        start->h = base_h + obstacle_avoidance_bonus;
+        start->parent = nullptr;
+        open_list.push(start);
+
+        cout << "SIPP başlatıldı: (" << sr << "," << sc << ") -> (" << gr << "," << gc << ")" << endl;
+        cout << "Başlangıç safe interval: [" << start->interval.start << ", " << start->interval.end << "]" << endl;
+        cout << "Başlangıç zamanı: " << start->time << endl;
+    }
+    else
+    {
+        cout << "Başlangıç noktası güvenli değil!" << endl;
+        return {};
     }
 
-    struct Agent {
+    shared_ptr<State> goal_node = nullptr;
+    int iterations = 0;
+    const int MAX_ITERATIONS = 50000; // Daha karmaşık path'ler için artırıldı
+
+    while (!open_list.empty() && iterations < MAX_ITERATIONS) {
+        auto current = open_list.top();
+        open_list.pop();
+        iterations++;
+
+        // Hedefe ulaştık mı?
+        if (current->r == gr && current->c == gc) {
+            goal_node = current;
+            cout << "Hedef bulundu! Iterasyon: " << iterations << endl;
+        cout << "Final g score: " << goal_node->g << endl;
+        cout << "Final h score: " << goal_node->h << endl;
+        cout << "Final f score: " << goal_node->f() << endl;
+            break;
+        }
+
+        // İyileştirilmiş Dominance: hem g hem de h skorlarını kontrol et
+        int pr = (current->parent ? current->r : -1);
+        int pc = (current->parent ? current->c : -1);
+        auto ckey = make_tuple(current->r, current->c, current->interval.start, pr, pc);
+        auto itc = best_g.find(ckey);
+        if (itc != best_g.end() && current->g > itc->second + 1e-4f) {
+            continue; // dominated by g score
+        }
+        
+        // Ek dominance kontrolü: f skoru da daha kötüyse atla
+        if (itc != best_g.end()) {
+            float best_f = itc->second + current->h;
+            if (current->f() > best_f + 1e-4f) {
+                continue; // dominated by f score
+            }
+        }
+
+        vector<shared_ptr<State>> successors;
+        getSuccessors(current, gm, successors, gr, gc);
+        
+        // Debug: successor sayısını ve open list boyutunu göster
+        if (iterations % 1000 == 0) {
+            cout << "Iteration " << iterations << ": " << successors.size() << " successors generated, open list size: " << open_list.size() << endl;
+        }
+
+        for (auto& succ : successors)
+        {
+            auto key = make_tuple(succ->r, succ->c, succ->interval.start, current->r, current->c);
+            auto it = best_g.find(key);
+            
+            // İyileştirilmiş successor ekleme: hem g hem de f skorunu kontrol et
+            bool should_add = false;
+            if (it == best_g.end()) {
+                should_add = true; // Yeni durum
+            } else if (succ->g + 1e-4f < it->second) {
+                should_add = true; // Daha iyi g skoru
+            } else if (abs(succ->g - it->second) < 1e-4f) {
+                // g skorları eşitse, f skorunu kontrol et
+                float current_f = it->second + succ->h;
+                if (succ->f() < current_f - 1e-4f) {
+                    should_add = true; // Daha iyi f skoru
+                }
+            }
+            
+            if (should_add) {
+                best_g[key] = succ->g;
+                open_list.push(succ);
+            }
+        }
+    }
+
+    if (iterations >= MAX_ITERATIONS) {
+        cout << "Maksimum iterasyon sayısına ulaşıldı! (" << MAX_ITERATIONS << ")" << endl;
+    } else {
+        cout << "Toplam iterasyon: " << iterations << endl;
+    }
+
+
+
+    if (goal_node) {
+        auto p = goal_node;
+        while (p) {
+            result.path.emplace_back(
+                sf::Vector2f(p->c * cellSize + cellSize / 2, p->r * cellSize + cellSize / 2),
+                p->time
+            );
+            p = p->parent;
+        }
+        reverse(result.path.begin(), result.path.end());
+
+        cout << "Path oluşturuldu, " << result.path.size() << " nokta" << endl;
+        for (size_t i = 0; i < result.path.size(); i++) {
+            cout << "  " << i << ": (" << result.path[i].first.x << "," << result.path[i].first.y << ") at " << result.path[i].second << endl;
+        }
+        
+        // Path analizi: koridor geçişleri için
+        if (result.path.size() > 2) {
+            cout << "Path analizi:" << endl;
+            for (size_t i = 1; i < result.path.size() - 1; i++) {
+                sf::Vector2f prev = result.path[i-1].first;
+                sf::Vector2f curr = result.path[i].first;
+                sf::Vector2f next = result.path[i+1].first;
+                
+                // Hücre koordinatları
+                int prev_r = static_cast<int>(prev.y / cellSize);
+                int prev_c = static_cast<int>(prev.x / cellSize);
+                int curr_r = static_cast<int>(curr.y / cellSize);
+                int curr_c = static_cast<int>(curr.x / cellSize);
+                int next_r = static_cast<int>(next.y / cellSize);
+                int next_c = static_cast<int>(next.x / cellSize);
+                
+                // Hareket yönü analizi
+                if (prev_r == curr_r && curr_r == next_r) {
+                    cout << "  Step " << i << ": Yatay koridor geçişi - " 
+                         << "(" << prev_c << "," << prev_r << ") -> (" << curr_c << "," << curr_r << ") -> (" << next_c << "," << next_r << ")" << endl;
+                } else if (prev_c == curr_c && curr_c == next_c) {
+                    cout << "  Step " << i << ": Dikey koridor geçişi - "
+                         << "(" << prev_c << "," << prev_r << ") -> (" << curr_c << "," << curr_r << ") -> (" << next_c << "," << next_r << ")" << endl;
+                } else {
+                    cout << "  Step " << i << ": Yön değişimi - "
+                         << "(" << prev_c << "," << prev_r << ") -> (" << curr_c << "," << curr_r << ") -> (" << next_c << "," << next_r << ")" << endl;
+                }
+            }
+        }
+    }
+    else
+    {
+        cout << "Yol bulunamadı! Başlangıç: (" << sr << "," << sc << ") Hedef: (" << gr << "," << gc << ")" << endl;
+        cout << "Başlangıç hücresinin safe interval sayısı: " << gm.safe[sr][sc].size() << endl;
+        cout << "Hedef hücresinin safe interval sayısı: " << gm.safe[gr][gc].size() << endl;
+        
+        // Safe interval detaylarını göster
+        if (!gm.safe[sr][sc].empty()) {
+            cout << "Başlangıç safe intervals:" << endl;
+            for (size_t i = 0; i < gm.safe[sr][sc].size(); i++) {
+                const auto& si = gm.safe[sr][sc][i];
+                cout << "  SI" << i << ": [" << si.start << ", " << si.end << "]" << endl;
+            }
+        }
+        if (!gm.safe[gr][gc].empty()) {
+            cout << "Hedef safe intervals:" << endl;
+            for (size_t i = 0; i < gm.safe[gr][gc].size(); i++) {
+                const auto& si = gm.safe[gr][gc][i];
+                cout << "  SI" << i << ": [" << si.start << ", " << si.end << "]" << endl;
+            }
+        }
+        
+        // Komşu hücrelerin safe interval sayılarını da göster
+        cout << "Komşu hücrelerin safe interval sayıları:" << endl;
+        for (int k = 0; k < 4; k++) {
+            int nr = sr + d4r[k];
+            int nc = sc + d4c[k];
+            if (nr >= 0 && nr < gm.rows && nc >= 0 && nc < gm.cols && !gm.isWall(nr, nc)) {
+                cout << "  (" << nr << "," << nc << "): " << gm.safe[nr][nc].size() << " intervals" << endl;
+            }
+        }
+        
+        // Edge blocking bilgilerini de göster
+        cout << "Edge blocking analizi:" << endl;
+        for (int k = 0; k < 4; k++) {
+            int nr = sr + d4r[k];
+            int nc = sc + d4c[k];
+            if (nr >= 0 && nr < gm.rows && nc >= 0 && nc < gm.cols && !gm.isWall(nr, nc)) {
+                auto key = make_tuple(sr, sc, nr, nc);
+                auto it = gm.edge_block.find(key);
+                if (it != gm.edge_block.end()) {
+                    cout << "  Edge (" << sr << "," << sc << ") -> (" << nr << "," << nc << "): " << it->second.size() << " blocked intervals" << endl;
+                    // Blocked interval detaylarını da göster
+                    for (size_t i = 0; i < it->second.size(); i++) {
+                        const auto& blocked = it->second[i];
+                        cout << "    Blocked " << i << ": [" << blocked.start << ", " << blocked.end << "]" << endl;
+                    }
+                }
+            }
+        }
+    }
+
+    // Closed listi doldur (best_g anahtarlarından)
+    for (const auto& item : best_g)
+    {
+        result.closed_list_nodes.push_back({ get<0>(item.first), get<1>(item.first) });
+    }
+
+    // Open listi doldur
+    while (!open_list.empty())
+    {
+        auto node = open_list.top();
+        open_list.pop();
+        result.open_list_nodes.push_back({ node->r, node->c });
+    }
+
+    return result;
+}
+
+struct Agent {
     sf::CircleShape shape;
     vector<pair<sf::Vector2f, float>> path; // Konum ve zaman
     float simTime = 0;
@@ -646,448 +952,482 @@
     int currentCellR = -1, currentCellC = -1; // Mevcut hücre pozisyonu
     float lastReplanTime = 0; // Son replan zamanı
 
-        Agent(float r = 10) {
-            shape.setRadius(r);
-            shape.setOrigin(r, r);
-            shape.setFillColor(sf::Color::Cyan);
-        }
+    Agent(float r = 10) {
+        shape.setRadius(r);
+        shape.setOrigin(r, r);
+        shape.setFillColor(sf::Color::Cyan);
+    }
 
-                    void setPath(const vector<pair<sf::Vector2f, float>>& p) {
-            path = p;
-            simTime = 0;
-            active = !p.empty();
-            if (active) {
-                shape.setPosition(path[0].first);
-                // Başlangıç hücre pozisyonunu ayarla
-                currentCellR = static_cast<int>(path[0].first.y / 50); // cellSize = 50
-                currentCellC = static_cast<int>(path[0].first.x / 50);
-                cout << "AGENT PATH SET! Size: " << path.size() << endl;
-                cout << "AGENT START: (" << path[0].first.x << ", " << path[0].first.y << ") cell=(" << currentCellR << "," << currentCellC << ") at time " << path[0].second << endl;
-                cout << "AGENT END: (" << path.back().first.x << ", " << path.back().first.y << ") at time " << path.back().second << endl;
-            } else {
-                cout << "AGENT PATH CLEARED!" << endl;
+    void setPath(const vector<pair<sf::Vector2f, float>>& p) {
+        path = p;
+        simTime = 0;
+        active = !p.empty();
+        if (active) {
+            shape.setPosition(path[0].first);
+            // Başlangıç hücre pozisyonunu ayarla
+            currentCellR = static_cast<int>(path[0].first.y / 50); // cellSize = 50
+            currentCellC = static_cast<int>(path[0].first.x / 50);
+            cout << "AGENT PATH SET! Size: " << path.size() << endl;
+            cout << "AGENT START: (" << path[0].first.x << ", " << path[0].first.y << ") cell=(" << currentCellR << "," << currentCellC << ") at time " << path[0].second << endl;
+            cout << "AGENT END: (" << path.back().first.x << ", " << path.back().first.y << ") at time " << path.back().second << endl;
+        }
+        else {
+            cout << "AGENT PATH CLEARED!" << endl;
+        }
+    }
+
+    // Collision detection fonksiyonu
+    bool checkCollision(const vector<DynamicObstacle>& obstacles, float currentTime) {
+        for (const auto& obs : obstacles) {
+            // Engel ile agent arasındaki mesafeyi hesapla
+            float dx = shape.getPosition().x - obs.shape.getPosition().x;
+            float dy = shape.getPosition().y - obs.shape.getPosition().y;
+            float distance = sqrt(dx * dx + dy * dy);
+
+            // Eğer çok yakınsa collision var
+            if (distance < (shape.getRadius() + obs.shape.getRadius() + 5)) {
+                return true;
             }
         }
+        return false;
+    }
 
-                    // Collision detection fonksiyonu
-        bool checkCollision(const vector<DynamicObstacle>& obstacles, float currentTime) {
-            for (const auto& obs : obstacles) {
-                // Engel ile agent arasındaki mesafeyi hesapla
-                float dx = shape.getPosition().x - obs.shape.getPosition().x;
-                float dy = shape.getPosition().y - obs.shape.getPosition().y;
-                float distance = sqrt(dx*dx + dy*dy);
+    void update(float currentSimTime, GridMap& gm, int goalR, int goalC, float cellSize, const vector<DynamicObstacle>& obstacles) {
+        if (!active) {
+            cout << "AGENT NOT ACTIVE!" << endl;
+            return;
+        }
+
+        if (path.size() < 2) {
+            // Eğer tek noktalı path geldiyse (başlangıç==hedef), hedefe varmış kabul et
+            if (!path.empty()) {
+                shape.setPosition(path.back().first);
+            }
+            active = false;
+            cout << "PATH SIZE < 2. Treating as goal reached." << endl;
+            return;
+        }
+
+        // Global simTime ile hizalan: saniyede 1 kare hız için zaman doğrudan dışarıdan gelir
+        simTime = currentSimTime;
+
+        // Hedefe ulaştı
+        if (simTime >= path.back().second) {
+            shape.setPosition(path.back().first);
+            active = false;
+            cout << "AGENT REACHED GOAL!" << endl;
+            return;
+        }
+
+        // SIPP'e uygun: düğümler arası sürekli interpolasyon yapma.
+        // Yalnızca en son ulaşılan düğümde konumlan (discrete step). Aradaki sürede bekler.
+        int idx = 0;
+        for (int i = static_cast<int>(path.size()) - 1; i >= 0; --i) {
+            if (simTime >= path[i].second) { idx = i; break; }
+        }
+        sf::Vector2f pos = path[idx].first;
+        shape.setPosition(pos);
+
+        // Hücre konumunu güncelle
+        int newCellR = static_cast<int>(pos.y / cellSize);
+        int newCellC = static_cast<int>(pos.x / cellSize);
+        if (newCellR != currentCellR || newCellC != currentCellC) {
+            currentCellR = newCellR;
+            currentCellC = newCellC;
+        }
+
+        // Hücre-temelli çakışma kontrolü ve loglama
+        for (size_t oi = 0; oi < obstacles.size(); ++oi) {
+            const auto& obs = obstacles[oi];
+            int orow = static_cast<int>(obs.shape.getPosition().y / cellSize);
+            int ocol = static_cast<int>(obs.shape.getPosition().x / cellSize);
+            if (orow == currentCellR && ocol == currentCellC) {
+                cout << "COLLISION DETECTED at t=" << simTime
+                    << " agentCell=(" << currentCellR << "," << currentCellC << ")"
+                    << " obstacle#" << oi << " cell=(" << orow << "," << ocol << ")" << endl;
                 
-                // Eğer çok yakınsa collision var
-                if (distance < (shape.getRadius() + obs.shape.getRadius() + 5)) {
-                    return true;
+                // Safe interval bilgilerini göster
+                cout << "  Agent safe intervals at (" << currentCellR << "," << currentCellC << "): " << gm.safe[currentCellR][currentCellC].size() << endl;
+                if (!gm.safe[currentCellR][currentCellC].empty()) {
+                    for (size_t i = 0; i < gm.safe[currentCellR][currentCellC].size(); i++) {
+                        const auto& si = gm.safe[currentCellR][currentCellC][i];
+                        cout << "    SI" << i << ": [" << si.start << ", " << si.end << "]" << endl;
+                    }
                 }
-            }
-            return false;
-        }
-
-        void update(float dt, GridMap& gm, int goalR, int goalC, float cellSize, const vector<DynamicObstacle>& obstacles) {
-            if (!active) {
-                cout << "AGENT NOT ACTIVE!" << endl;
-                return;
-            }
-            
-            if (path.size() < 2) {
-                cout << "PATH TOO SMALL! Size: " << path.size() << " - Attempting replan..." << endl;
-                // Path çok küçükse replan yap
-                if (simTime - lastReplanTime > 3.0f) {
+                
+                // Anında replan dene; SIPP bekleme/yan-adım çözümlerini bulacaktır
+                if (simTime - lastReplanTime > 0.1f) {
                     replan(gm, goalR, goalC, cellSize, obstacles);
                 }
-                return;
-            }
-
-            simTime += dt;
-
-            // Hedefe ulaştı
-            if (simTime >= path.back().second) {
-                shape.setPosition(path.back().first);
-                active = false;
-                cout << "AGENT REACHED GOAL!" << endl;
-                return;
-            }
-
-            // Basit interpolasyon - path boyunca hareket et
-            for (int i = 0; i < path.size() - 1; i++) {
-                if (simTime >= path[i].second && simTime < path[i + 1].second) {
-                    float t0 = path[i].second;
-                    float t1 = path[i + 1].second;
-                    float factor = (simTime - t0) / (t1 - t0);
-                    
-                    sf::Vector2f pos = path[i].first + factor * (path[i + 1].first - path[i].first);
-                    
-                    // Collision kontrolü - eğer collision varsa hareket etme
-                    shape.setPosition(pos);
-                    if (checkCollision(obstacles, simTime)) {
-                        cout << "COLLISION DETECTED! Agent waiting at time " << simTime << endl;
-                        // Pozisyonu geri al ve bekle
-                        shape.setPosition(path[i].first);
-                        break;
-                    }
-                    
-                    // Mevcut hücre pozisyonunu güncelle
-                    int newCellR = static_cast<int>(pos.y / cellSize);
-                    int newCellC = static_cast<int>(pos.x / cellSize);
-                    
-                    // Hücre değiştiyse replan kontrolü yap
-                    if (newCellR != currentCellR || newCellC != currentCellC) {
-                        currentCellR = newCellR;
-                        currentCellC = newCellC;
-                        
-                        // Her 5 saniyede bir replan yap
-                        if (simTime - lastReplanTime > 5.0f) {
-                            replan(gm, goalR, goalC, cellSize, obstacles);
-                        }
-                    }
-                    
-                    // Debug: Her 3 saniyede bir pozisyon yazdır
-                    static float lastDebugTime = 0;
-                    if (simTime - lastDebugTime > 3.0f) {
-                        cout << "AGENT at time " << simTime << ": pos=(" << pos.x << "," << pos.y << ") cell=(" << currentCellR << "," << currentCellC << ") segment=" << i << endl;
-                        lastDebugTime = simTime;
-                    }
-                    break;
-                }
+                break;
             }
         }
 
-        // Replan fonksiyonu - yeni path hesaplar
-        bool replan(GridMap& gm, int goalR, int goalC, float cellSize, const vector<DynamicObstacle>& obstacles) {
-            if (currentCellR < 0 || currentCellC < 0) return false;
-            
-            cout << "REPLANNING from (" << currentCellR << "," << currentCellC << ") to (" << goalR << "," << goalC << ") at time " << simTime << endl;
-            
-            // Yeni safe interval'ları hesapla
-            computeSafeIntervals(gm, obstacles);
-            
-            // Mevcut hücrenin safe interval'larını kontrol et
-            cout << "Current cell (" << currentCellR << "," << currentCellC << ") safe intervals: " << gm.safe[currentCellR][currentCellC].size() << endl;
-            cout << "Goal cell (" << goalR << "," << goalC << ") safe intervals: " << gm.safe[goalR][goalC].size() << endl;
-            
-            // SIPP ile yeni path bul
-            SIPP_Result result = runSIPP(gm, currentCellR, currentCellC, goalR, goalC, cellSize);
-            
-            if (!result.path.empty()) {
-                setPath(result.path);
-                lastReplanTime = simTime;
-                cout << "REPLAN SUCCESS! New path size: " << result.path.size() << endl;
-                return true;
-            } else {
-                cout << "REPLAN FAILED! No path found!" << endl;
-                // Path bulunamazsa agent'ı durdur
-                active = false;
-                return false;
-            }
-        }
-
-        void draw(sf::RenderWindow& w) {
-            // Yolu çiz - daha kalın ve görünür yap
-            if (path.size() > 1) {
-                for (size_t i = 1; i < path.size(); i++) {
-                    sf::Vertex line[] = {
-                        sf::Vertex(path[i - 1].first, sf::Color(255, 255, 0, 200)),
-                        sf::Vertex(path[i].first, sf::Color(255, 255, 0, 200))
-                    };
-                    w.draw(line, 2, sf::Lines);
-                }
-                
-                // Path noktalarını da çiz
-                for (size_t i = 0; i < path.size(); i++) {
-                    sf::CircleShape point(3);
-                    point.setOrigin(3, 3);
-                    point.setPosition(path[i].first);
-                    point.setFillColor(sf::Color::Yellow);
-                    w.draw(point);
-                }
-            }
-
-            // Ajanı çiz
-            w.draw(shape);
-        }
-    };
-
-    void updateDynamicObstacles(Grid& grid, vector<DynamicObstacle>& obstacles, float simTime) {
-
-        //Önce engellerin eski konumlarını boşalt 
-        for (auto& obs : obstacles)
-        {
-            //Eski konum hala engelse ve başka engel yoksa 
-            if (grid.cells[obs.r][obs.c].type == WALL)
-            {
-                grid.cells[obs.r][obs.c].setType(EMPTY);
-
-            }
-        }
-        
-
-        for (auto& obs : obstacles)
-        {
-            obs.update(simTime);
-        }
-        
+        // İsteğe bağlı: periyodik replan (kapalı tutuyoruz). SIPP planı güvenliyse gerek yok.
     }
-    int main() {
-        const int rows = 9, cols = 9;
-        const float cellSize = 50;
 
-        sf::RenderWindow window(sf::VideoMode(800, 600), "SIPP Pathfinding");
-        window.setFramerateLimit(60);
+    // Replan fonksiyonu - yeni path hesaplar
+    bool replan(GridMap& gm, int goalR, int goalC, float cellSize, const vector<DynamicObstacle>& obstacles) {
+        if (currentCellR < 0 || currentCellC < 0) return false;
 
-        // Yazı tipi yükle
-        sf::Font font;
-        if (!font.loadFromFile("arial.ttf")) {
-            cerr << "Failed to load font!" << endl;
-            return 1;
+        cout << "REPLANNING from (" << currentCellR << "," << currentCellC << ") to (" << goalR << "," << goalC << ") at time " << simTime << endl;
+
+        // Yeni safe interval'ları hesapla
+        computeSafeIntervals(gm, obstacles);
+
+        // Mevcut hücrenin safe interval'larını kontrol et
+        cout << "Current cell (" << currentCellR << "," << currentCellC << ") safe intervals: " << gm.safe[currentCellR][currentCellC].size() << endl;
+        cout << "Goal cell (" << goalR << "," << goalC << ") safe intervals: " << gm.safe[goalR][goalC].size() << endl;
+
+        // SIPP ile yeni path bul (simTime ile hizalanmış başlangıç)
+        SIPP_Result result = runSIPP(gm, currentCellR, currentCellC, goalR, goalC, cellSize, simTime);
+
+        if (!result.path.empty()) {
+            setPath(result.path);
+            lastReplanTime = simTime;
+            cout << "REPLAN SUCCESS! New path size: " << result.path.size() << endl;
+            return true;
         }
-        //Elapsed time 
-        sf::Text elapsedTimeText;
-        elapsedTimeText.setFont(font);
-        elapsedTimeText.setCharacterSize(18);
-        elapsedTimeText.setFillColor(sf::Color::White);
-        elapsedTimeText.setPosition(20, window.getSize().y - 30);
-        // UI Setup
-        Grid grid(rows, cols, cellSize);
-        sf::View uiView(sf::FloatRect(0, 0, 200, 600));
-        uiView.setViewport(sf::FloatRect(0, 0, 0.25f, 1));
+        else {
+            cout << "REPLAN FAILED! No path found!" << endl;
+            // Path bulunamazsa agent'ı durdur
+            active = false;
+            return false;
+        }
+    }
 
-        sf::View gridView(sf::FloatRect(0, 0, cols * cellSize, rows * cellSize));
-        gridView.setViewport(sf::FloatRect(0.25f, 0, 0.75f, 1));
+    void draw(sf::RenderWindow& w) {
+        // Yolu çiz - daha kalın ve görünür yap
+        if (path.size() > 1) {
+            for (size_t i = 1; i < path.size(); i++) {
+                sf::Vertex line[] = {
+                    sf::Vertex(path[i - 1].first, sf::Color(255, 255, 0, 200)),
+                    sf::Vertex(path[i].first, sf::Color(255, 255, 0, 200))
+                };
+                w.draw(line, 2, sf::Lines);
+            }
 
-        // UI Elements
-        sf::RectangleShape panel(sf::Vector2f(200, 600));
-        panel.setFillColor(sf::Color(50, 50, 50));
+            // Path noktalarını da çiz
+            for (size_t i = 0; i < path.size(); i++) {
+                sf::CircleShape point(3);
+                point.setOrigin(3, 3);
+                point.setPosition(path[i].first);
+                point.setFillColor(sf::Color::Yellow);
+                w.draw(point);
+            }
+        }
 
-        Button saveButton(20, 350, 160, 40, font, "Save Grid");
-        Button loadButton(20, 400, 160, 40, font, "Load Grid");
-        Button runButton(20, 450, 160, 40, font, "Run SIPP");
+        // Ajanı çiz
+        w.draw(shape);
+    }
+};
 
-        
-        vector<string> modes = {
-            "Draw Wall", "Horizontal Obstacle",
-            "Vertical Obstacle", "Delete Obstacle",
-            "Set Start", "Set Goal"
-        };
-        SelectBox modeSelect(20, 50, 160, 30, font, modes);
+void updateDynamicObstacles(Grid& grid, vector<DynamicObstacle>& obstacles, float simTime) {
 
-            // Game Objects
+    //Önce engellerin eski konumlarını boşalt 
+    for (auto& obs : obstacles)
+    {
+        //Eski konum hala engelse ve başka engel yoksa 
+        if (grid.cells[obs.r][obs.c].type == WALL)
+        {
+            grid.cells[obs.r][obs.c].setType(EMPTY);
+
+        }
+    }
+
+
+    for (auto& obs : obstacles)
+    {
+        obs.update(simTime);
+    }
+
+}
+int main() {
+    const int rows = 9, cols = 9;
+    const float cellSize = 50;
+
+    sf::RenderWindow window(sf::VideoMode(800, 600), "SIPP Pathfinding");
+    window.setFramerateLimit(60);
+
+    // Yazı tipi yükle
+    sf::Font font;
+    if (!font.loadFromFile("arial.ttf")) {
+        cerr << "Failed to load font!" << endl;
+        return 1;
+    }
+    //Elapsed time 
+    sf::Text elapsedTimeText;
+    elapsedTimeText.setFont(font);
+    elapsedTimeText.setCharacterSize(18);
+    elapsedTimeText.setFillColor(sf::Color::White);
+    elapsedTimeText.setPosition(20, window.getSize().y - 30);
+    // UI Setup
+    Grid grid(rows, cols, cellSize);
+    sf::View uiView(sf::FloatRect(0, 0, 200, 600));
+    uiView.setViewport(sf::FloatRect(0, 0, 0.25f, 1));
+
+    sf::View gridView(sf::FloatRect(0, 0, cols * cellSize, rows * cellSize));
+    gridView.setViewport(sf::FloatRect(0.25f, 0, 0.75f, 1));
+
+    // UI Elements
+    sf::RectangleShape panel(sf::Vector2f(200, 600));
+    panel.setFillColor(sf::Color(50, 50, 50));
+
+    Button saveButton(20, 350, 160, 40, font, "Save Grid");
+    Button loadButton(20, 400, 160, 40, font, "Load Grid");
+    Button runButton(20, 450, 160, 40, font, "Run SIPP");
+
+
+    vector<string> modes = {
+        "Draw Wall", "Horizontal Obstacle",
+        "Vertical Obstacle", "Delete Obstacle",
+        "Set Start", "Set Goal"
+    };
+    SelectBox modeSelect(20, 50, 160, 30, font, modes);
+
+    // Game Objects
     vector<DynamicObstacle> obstacles;
     Agent agent(cellSize / 3);
 
-        //Yeni görselleştirme için vektörler
-        vector<sf::RectangleShape> open_list_shapes;
-        vector<sf::RectangleShape> closed_list_shapes;
-        int startR = -1, startC = -1;
-        int goalR = -1, goalC = -1;
+    //Yeni görselleştirme için vektörler
+    vector<sf::RectangleShape> open_list_shapes;
+    vector<sf::RectangleShape> closed_list_shapes;
+    int startR = -1, startC = -1;
+    int goalR = -1, goalC = -1;
 
-        //Sadece gerektiğinde hesaplancak GridMap
-        unique_ptr<GridMap> gm = nullptr;
-        bool showSafeIntervals = false; //Aralıkları göstermek için bir flag
+    //Sadece gerektiğinde hesaplancak GridMap
+    unique_ptr<GridMap> gm = nullptr;
+    bool showSafeIntervals = false; //Aralıkları göstermek için bir flag
 
-        float simTime = 0;
-        bool simulating = false;
-        sf::Clock simClock;
+    float simTime = 0;
+    bool simulating = false;
+    sf::Clock simClock;
+    // Run SIPP sonrası hedefe varana kadar geçen süreyi göstermek için
+    float runElapsedFrozen = -1.0f; // hedefe varınca dondurulacak, yeni run'da -1'e sıfırlanır
 
-        sf::Clock clock;
+    sf::Clock clock;
 
-        int pathIndex = 0;
-        sf::Clock moveClock;
-        float moveDelay = 0.2f;
-        // Main loop
-        while (window.isOpen()) {
-            sf::Event event;
-            sf::Vector2i mousePos = sf::Mouse::getPosition(window);
-            sf::Vector2f mouseUIPos = window.mapPixelToCoords(mousePos, uiView);
+    int pathIndex = 0;
+    sf::Clock moveClock;
+    float moveDelay = 0.2f;
+    // Main loop
+    while (window.isOpen()) {
+        sf::Event event;
+        sf::Vector2i mousePos = sf::Mouse::getPosition(window);
+        sf::Vector2f mouseUIPos = window.mapPixelToCoords(mousePos, uiView);
 
-            // Update UI elements
-            saveButton.update(mouseUIPos);
-            loadButton.update(mouseUIPos);
-            runButton.update(mouseUIPos);
+        // Update UI elements
+        saveButton.update(mouseUIPos);
+        loadButton.update(mouseUIPos);
+        runButton.update(mouseUIPos);
 
-            sf::Time elapsed = clock.getElapsedTime();
-            elapsedTimeText.setString("Elapsed: " + std::to_string(elapsed.asSeconds()) + "s");
-
-            float dt = clock.restart().asSeconds();
-            simTime += dt;
-            updateDynamicObstacles(grid, obstacles, simTime);
-            while (window.pollEvent(event)) {
-                if (event.type == sf::Event::Closed) {
-                    window.close();
+        // Ekranda gösterilecek süre: Run SIPP'ten hedefe ulaşana kadar geçen süre
+        // Simülasyon sırasında canlı olarak simTime gösterilir, hedefe ulaşıldığında değer dondurulur
+        {
+            std::ostringstream oss;
+            oss.setf(std::ios::fixed);
+            oss << std::setprecision(2);
+            if (simulating) {
+                if (agent.active) {
+                    oss << "Elapsed: " << simTime << "s";
                 }
-                //"i" tuşuna basarak aralık görünürlüğü açıp kapama
-                if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::I)
-                {
-                    showSafeIntervals = !showSafeIntervals;
+                else {
+                    if (runElapsedFrozen < 0.0f) runElapsedFrozen = simTime; // ilk kez hedefe varıldı
+                    oss << "Elapsed: " << runElapsedFrozen << "s";
                 }
-                modeSelect.update(mouseUIPos, event);
-                
-                // Handle button clicks
-                if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
-                    // UI Buttons
-                    if (saveButton.isClicked(mouseUIPos, event)) {
-                        grid.save("grid.txt");
+            }
+            else {
+                if (runElapsedFrozen >= 0.0f) {
+                    oss << "Elapsed: " << runElapsedFrozen << "s";
+                }
+                else {
+                    oss << "Elapsed: 0.00s";
+                }
+            }
+            elapsedTimeText.setString(oss.str());
+        }
+
+        // Not: simTime sadece simülasyon sırasında (aşağıda) güncellenir
+        clock.restart();
+        while (window.pollEvent(event)) {
+            if (event.type == sf::Event::Closed) {
+                window.close();
+            }
+            //"i" tuşuna basarak aralık görünürlüğü açıp kapama
+            if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::I)
+            {
+                showSafeIntervals = !showSafeIntervals;
+            }
+            modeSelect.update(mouseUIPos, event);
+
+            // Handle button clicks
+            if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
+                // UI Buttons
+                if (saveButton.isClicked(mouseUIPos, event)) {
+                    grid.save("grid.txt");
+                }
+                else if (loadButton.isClicked(mouseUIPos, event)) {
+                    grid.load("grid.txt");
+
+                    // Find start and goal positions after loading
+                    for (int r = 0; r < rows; r++) {
+                        for (int c = 0; c < cols; c++) {
+                            if (grid.cells[r][c].type == START) {
+                                startR = r;
+                                startC = c;
+                            }
+                            else if (grid.cells[r][c].type == GOAL) {
+                                goalR = r;
+                                goalC = c;
+                            }
+                        }
                     }
-                    else if (loadButton.isClicked(mouseUIPos, event)) {
-                        grid.load("grid.txt");
-
-                        // Find start and goal positions after loading
+                }
+                else if (runButton.isClicked(mouseUIPos, event)) {
+                    if (startR >= 0 && goalR >= 0) {
+                        // Create GridMap from current grid
+                        gm = make_unique<GridMap>(rows, cols);
                         for (int r = 0; r < rows; r++) {
                             for (int c = 0; c < cols; c++) {
-                                if (grid.cells[r][c].type == START) {
-                                    startR = r;
-                                    startC = c;
-                                }
-                                else if (grid.cells[r][c].type == GOAL) {
-                                    goalR = r;
-                                    goalC = c;
-                                }
+                                gm->cells[r][c] = grid.cells[r][c].type;
                             }
                         }
-                    }
-                    else if (runButton.isClicked(mouseUIPos, event)) {
-                        if (startR >= 0 && goalR >= 0) {
-                            // Create GridMap from current grid
-                            gm = make_unique<GridMap>(rows, cols);
-                            for (int r = 0; r < rows; r++) {
-                                for (int c = 0; c < cols; c++) {
-                                    gm->cells[r][c] = grid.cells[r][c].type;
-                                }
-                            }
 
-                            // Compute obstacle paths
-                            for (auto& o : obstacles) {
-                                o.computePath(grid);
-                            }
+                        // Compute obstacle paths
+                        for (auto& o : obstacles) {
+                            o.computePath(grid);
+                        }
 
-                            // Compute safe intervals and run SIPP
-                            computeSafeIntervals(*gm, obstacles);
-                            
-                                                    SIPP_Result result = runSIPP(*gm, startR, startC, goalR, goalC, cellSize);
-                        
+                        // Compute safe intervals and run SIPP
+                        computeSafeIntervals(*gm, obstacles);
+
+                        SIPP_Result result = runSIPP(*gm, startR, startC, goalR, goalC, cellSize);
+
                         cout << "RESULT PATH SIZE: " << result.path.size() << endl;
-                        for(int i = 0; i < result.path.size(); i++) {
+                        for (int i = 0; i < result.path.size(); i++) {
                             cout << "Path[" << i << "]: (" << result.path[i].first.x << "," << result.path[i].first.y << ") at " << result.path[i].second << endl;
                         }
-                        
+
                         agent.setPath(result.path);
-                            
-                            //Eski görselleştirme şekillerini temizle
-                            open_list_shapes.clear();
-                            closed_list_shapes.clear();
 
-                            /*//Closed list şekillerini oluştur (Açık Turuncu)
-                            for(const auto& node : result.closed_list_nodes)
-                            {
-                                sf::RectangleShape shape({ cellSize,cellSize });
-                                shape.setPosition(node.second * cellSize, node.first * cellSize);
-                                shape.setFillColor(sf::Color(255, 200, 100, 100));
-                                closed_list_shapes.push_back(shape);
+                        //Eski görselleştirme şekillerini temizle
+                        open_list_shapes.clear();
+                        closed_list_shapes.clear();
 
-                            }
+                        /*//Closed list şekillerini oluştur (Açık Turuncu)
+                        for(const auto& node : result.closed_list_nodes)
+                        {
+                            sf::RectangleShape shape({ cellSize,cellSize });
+                            shape.setPosition(node.second * cellSize, node.first * cellSize);
+                            shape.setFillColor(sf::Color(255, 200, 100, 100));
+                            closed_list_shapes.push_back(shape);
 
-                            //Open list şekilleirni oluştur (Açık Mavi)
-                            for(const auto& node : result.open_list_nodes)
-                            {
-                                sf::RectangleShape shape({ cellSize,cellSize });
-                                shape.setPosition(node.second * cellSize, node.first * cellSize);
-                                shape.setFillColor(sf::Color(100, 200, 255, 100));
-                                open_list_shapes.push_back(shape);
-                            }*/
-
-                            
-                            simTime = 0;
-                            simulating =!result.path.empty(); //Sadece yol varsa simülasyou başlat
-                            simClock.restart();
                         }
+
+                        //Open list şekilleirni oluştur (Açık Mavi)
+                        for(const auto& node : result.open_list_nodes)
+                        {
+                            sf::RectangleShape shape({ cellSize,cellSize });
+                            shape.setPosition(node.second * cellSize, node.first * cellSize);
+                            shape.setFillColor(sf::Color(100, 200, 255, 100));
+                            open_list_shapes.push_back(shape);
+                        }*/
+
+
+                        simTime = 0;
+                        runElapsedFrozen = -1.0f; // yeni koşu için süreyi sıfırla
+                        simulating = !result.path.empty(); //Sadece yol varsa simülasyou başlat
+                        simClock.restart();
                     }
+                }
 
-                    // Grid clicks
-                    sf::Vector2f mouseGridPos = window.mapPixelToCoords(mousePos, gridView);
-                    int r = static_cast<int>(mouseGridPos.y / cellSize);
-                    int c = static_cast<int>(mouseGridPos.x / cellSize);
+                // Grid clicks
+                sf::Vector2f mouseGridPos = window.mapPixelToCoords(mousePos, gridView);
+                int r = static_cast<int>(mouseGridPos.y / cellSize);
+                int c = static_cast<int>(mouseGridPos.x / cellSize);
 
-                    if (r >= 0 && r < rows && c >= 0 && c < cols) {
-                        string mode = modeSelect.getSelected();
-                        simulating = false;
-                        agent.setPath({});
+                if (r >= 0 && r < rows && c >= 0 && c < cols) {
+                    string mode = modeSelect.getSelected();
+                    simulating = false;
+                    agent.setPath({});
 
-                        if (mode == "Draw Wall") {
-                            grid.toggleWall(r, c);
+                    if (mode == "Draw Wall") {
+                        grid.toggleWall(r, c);
+                    }
+                    else if (mode == "Set Start") {
+                        if (startR >= 0) {
+                            grid.cells[startR][startC].setType(EMPTY);
                         }
-                        else if (mode == "Set Start") {
-                            if (startR >= 0) {
-                                grid.cells[startR][startC].setType(EMPTY);
-                            }
-                            startR = r;
-                            startC = c;
-                            grid.cells[r][c].setType(START);
+                        startR = r;
+                        startC = c;
+                        grid.cells[r][c].setType(START);
+                    }
+                    else if (mode == "Set Goal") {
+                        if (goalR >= 0) {
+                            grid.cells[goalR][goalC].setType(EMPTY);
                         }
-                        else if (mode == "Set Goal") {
-                            if (goalR >= 0) {
-                                grid.cells[goalR][goalC].setType(EMPTY);
-                            }
-                            goalR = r;
-                            goalC = c;
-                            grid.cells[r][c].setType(GOAL);
-                        }
-                        else if (mode == "Horizontal Obstacle") {
-                            obstacles.emplace_back(r, c, true, cellSize);
-                            obstacles.back().computePath(grid); //Ekler eklemez yolunu hesapla
-                        }
-                        else if (mode == "Vertical Obstacle") {
-                            obstacles.emplace_back(r, c, false, cellSize);
-                            obstacles.back().computePath(grid); //Ekler eklemez yolunu hesapla
-                        }
-                        else if (mode == "Delete Obstacle") {
-                            obstacles.erase(
-                                remove_if(obstacles.begin(), obstacles.end(),
-                                    [r, c](const DynamicObstacle& o) {
-                                        return o.r == r && o.c == c;
-                                    }),
-                                obstacles.end()
-                                        );
-                        }
+                        goalR = r;
+                        goalC = c;
+                        grid.cells[r][c].setType(GOAL);
+                    }
+                    else if (mode == "Horizontal Obstacle") {
+                        obstacles.emplace_back(r, c, true, cellSize);
+                        obstacles.back().computePath(grid); //Ekler eklemez yolunu hesapla
+                    }
+                    else if (mode == "Vertical Obstacle") {
+                        obstacles.emplace_back(r, c, false, cellSize);
+                        obstacles.back().computePath(grid); //Ekler eklemez yolunu hesapla
+                    }
+                    else if (mode == "Delete Obstacle") {
+                        obstacles.erase(
+                            remove_if(obstacles.begin(), obstacles.end(),
+                                [r, c](const DynamicObstacle& o) {
+                                    return o.r == r && o.c == c;
+                                }),
+                            obstacles.end()
+                                    );
                     }
                 }
             }
+        }
 
-                    // Update simulation
+        // Update simulation
         if (simulating) {
             float dt = simClock.restart().asSeconds();
-            simTime += dt * 0.5f; // Simülasyon hızını yavaşlat - saniyede 1 kare
+            simTime += dt; // saniyede 1 kare: 1 hücre/sn
 
-                // Update obstacles
-                for (auto& o : obstacles) {
-                    o.update(simTime);
-                }
+            // Update obstacles and grid occupancy only simülasyonda
+            updateDynamicObstacles(grid, obstacles, simTime);
 
-                            // Update agent with replanning
+            // Update agent with replanning (global simTime ver)
             if (gm) {
-                agent.update(dt, *gm, goalR, goalC, cellSize, obstacles);
+                agent.update(simTime, *gm, goalR, goalC, cellSize, obstacles);
             }
             if (!agent.active) {
                 simulating = false; //Ajan hedefe ulaşınca simülasyonu bitir
             }
+        }
+        else {
+            // Edit mode: engelleri hareket ettirme, sadece path'i güncel tut
+            for (auto& o : obstacles) {
+                o.computePath(grid);
+                // Edit modda görsel konumu başlangıç hücresinde tut
+                o.r = o.start_r;
+                o.c = o.start_c;
+                o.shape.setPosition(o.c * cellSize + cellSize / 2, o.r * cellSize + cellSize / 2);
             }
-            else {
-                // Edit mode obstacle updates
-                for (auto& o : obstacles) {
-                    o.computePath(grid);
-                }
-            }
-            
-        
+        }
 
-            // Rendering
-            window.clear(sf::Color::White);
 
-            // Draw grid view
-            window.setView(gridView);
-            grid.draw(window);
 
-                    // Draw safe intervals (for debugging)
+        // Rendering
+        window.clear(sf::Color::White);
+
+        // Draw grid view
+        window.setView(gridView);
+        grid.draw(window);
+
+        // Draw safe intervals (for debugging)
         if (startR >= 0 && goalR >= 0) {
             GridMap gm(rows, cols);
             for (int r = 0; r < rows; r++) {
@@ -1102,37 +1442,37 @@
             gm.drawSafeIntervals(window, cellSize); // Her zaman göster
         }
 
-            // Draw obstacles
-            for (auto& o : obstacles) {
-                o.draw(window, simulating);
-            }
-
-            // Draw agent and path
-            agent.draw(window);
-            
-            // Debug: Path bilgilerini konsola yazdır
-            if (simulating && !agent.path.empty()) {
-                static float lastDebugTime = 0;
-                if (simTime - lastDebugTime > 1.0f) { // Her saniyede bir
-                    cout << "Path size: " << agent.path.size() << endl;
-                    cout << "Current simTime: " << simTime << endl;
-                    lastDebugTime = simTime;
-                }
-            }
-            
-            
-
-            // Draw UI
-            window.setView(uiView);
-            window.draw(panel);
-            saveButton.draw(window);
-            loadButton.draw(window);
-            runButton.draw(window);
-            modeSelect.draw(window);
-            //Draw clock
-            window.draw(elapsedTimeText);
-            window.display();
+        // Draw obstacles
+        for (auto& o : obstacles) {
+            o.draw(window, simulating);
         }
 
-        return 0;
+        // Draw agent and path
+        agent.draw(window);
+
+        // Debug: Path bilgilerini konsola yazdır
+        if (simulating && !agent.path.empty()) {
+            static float lastDebugTime = 0;
+            if (simTime - lastDebugTime > 1.0f) { // Her saniyede bir
+                cout << "Path size: " << agent.path.size() << endl;
+                cout << "Current simTime: " << simTime << endl;
+                lastDebugTime = simTime;
+            }
+        }
+
+
+
+        // Draw UI
+        window.setView(uiView);
+        window.draw(panel);
+        saveButton.draw(window);
+        loadButton.draw(window);
+        runButton.draw(window);
+        modeSelect.draw(window);
+        //Draw clock
+        window.draw(elapsedTimeText);
+        window.display();
     }
+
+    return 0;
+}
